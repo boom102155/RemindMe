@@ -7,23 +7,48 @@
   </div>
 
   <div class="setup-stepper" id="settings-stepper">
-    <button type="button" class="stepper-item active" data-step="1" onclick="goToSetupStep(1)">
+    <button
+      type="button"
+      class="stepper-item active"
+      data-step="1"
+      onclick="goToSetupStep(1)"
+    >
       <span class="step-number">1</span>
       <span class="step-label">เริ่มต้นระบบ</span>
     </button>
-    <button type="button" class="stepper-item" data-step="2" onclick="goToSetupStep(2)">
+    <button
+      type="button"
+      class="stepper-item"
+      data-step="2"
+      onclick="goToSetupStep(2)"
+    >
       <span class="step-number">2</span>
       <span class="step-label">เชื่อมต่อ LINE</span>
     </button>
-    <button type="button" class="stepper-item" data-step="3" onclick="goToSetupStep(3)">
+    <button
+      type="button"
+      class="stepper-item"
+      data-step="3"
+      onclick="goToSetupStep(3)"
+    >
       <span class="step-number">3</span>
       <span class="step-label">กลุ่ม LINE</span>
     </button>
-    <button type="button" class="stepper-item" data-step="4" onclick="goToSetupStep(4)">
+    <button
+      type="button"
+      class="stepper-item"
+      data-step="4"
+      onclick="goToSetupStep(4)"
+    >
       <span class="step-number">4</span>
       <span class="step-label">หมวดหมู่</span>
     </button>
-    <button type="button" class="stepper-item" data-step="5" onclick="goToSetupStep(5)">
+    <button
+      type="button"
+      class="stepper-item"
+      data-step="5"
+      onclick="goToSetupStep(5)"
+    >
       <span class="step-number">5</span>
       <span class="step-label">Rich Menu</span>
     </button>
@@ -35,22 +60,55 @@
     <div class="setup-step active" data-step="1">
       <div class="card">
         <h3>การตั้งค่าครั้งแรก</h3>
-        <p class="text-secondary mb">หากคุณเพิ่ง Copy ระบบนี้มา ให้ทำตามขั้นตอนด้านล่าง</p>
+        <p class="text-secondary mb">
+          หากคุณเพิ่ง Copy ระบบนี้มา ให้ทำตามขั้นตอนด้านล่าง
+        </p>
         <ol class="setup-list">
-          <li>Deploy โปรเจกต์นี้เป็น Web App (ใช้ Execute as: Me, Access: Anyone)</li>
-          <li>กดปุ่ม “ตั้งค่าเริ่มต้นระบบ” เพื่อสร้าง Sheet และหมวดหมู่เริ่มต้น</li>
+          <li>
+            Deploy โปรเจกต์นี้เป็น Web App (ใช้ Execute as: Me, Access: Anyone)
+          </li>
+          <li>
+            กดปุ่ม “ตั้งค่าเริ่มต้นระบบ” เพื่อสร้าง Sheet และหมวดหมู่เริ่มต้น
+          </li>
           <li>นำ Web App URL มาใส่ในขั้นตอน “เชื่อมต่อ LINE”</li>
-          <li>ใส่ LINE Channel Access Token และ User ID </li>
-          <li>นำ Url ของระบบมาใส่ในช่อง "ลิงก์ Dashboard (Web App URL)" ตั้งเวลาเริ่มต้น Trigger เป็น "ตรงเวลา" จากนั้นกด "เปิด Trigger" และกด "บันทึกการตั้งค่า LINE" และกด "ทดสอบ LINE" หากส่งสำเร็จจะมีข้อความแจ้งเตือนไปยัง Line Bot</li>
-          <li>หากต้องการดึง Line Bot เข้ากลุ่มให้ไปตั้งค่าการอนุญาตใน Line Messaging API เมื่อดึงบอทเข้ากลุ่มระบบจะเพิ่มรายการกลุ่มอัตโนมัติ</li>
-          <li>สามารถ เพิ่ม ลบ แก้ไข ข้อมูลหมวดหมู่ได้ในหน้านี้จากแถบ <b>หมวดหมู่</b> ด้านบน</li>
-          <li>การทำ Rich Menu ใช้ขนาดของภาพตามที่ Line กำหนด (2500 x 1686 px) และนำภาพไปใส่ไว้ใน Drive จากนั้นนำ Id ของภาพมาใส่ในช่อง "Google Drive File ID รูป Rich Menu" ในแถบ <b>Rich Menu</b> ด้านบน จากนั้นกดปุ่ม "สร้างและตั้งค่า Rich Menu"</li>    
+          <li>ใส่ LINE Channel Access Token และ User ID</li>
+          <li>
+            นำ URL ของระบบมาใส่ในช่อง “ลิงก์ Dashboard (Web App URL)” ตั้งค่า
+            Trigger เริ่มต้นเป็น “ตรงเวลา” จากนั้นกด “เปิด Trigger” และ
+            “บันทึกการตั้งค่า LINE” แล้วกด “ทดสอบ LINE”
+            หากส่งสำเร็จจะมีข้อความแจ้งเตือนไปยัง Line Bot
+          </li>
+          <li>
+            หากต้องการดึง Line Bot เข้ากลุ่มให้ไปตั้งค่าการอนุญาตใน Line
+            Messaging API เมื่อดึงบอทเข้ากลุ่มระบบจะเพิ่มรายการกลุ่มอัตโนมัติ
+          </li>
+          <li>
+            สามารถเพิ่ม ลบ แก้ไข ข้อมูลหมวดหมู่ได้ในหน้านี้จากแถบ
+            <b>หมวดหมู่</b> ด้านบน
+          </li>
+          <li>
+            การทำ Rich Menu ใช้ขนาดของภาพตามที่ Line กำหนด (2500 x 1686 px)
+            และนำภาพไปใส่ไว้ใน Drive จากนั้นนำ ID ของภาพมาใส่ในช่อง “Google
+            Drive File ID รูป Rich Menu” ในแถบ <b>Rich Menu</b> ด้านบน
+            จากนั้นกดปุ่ม “สร้างและตั้งค่า Rich Menu”
+          </li>
+          <li>
+            ตรวจสอบการตั้งค่าและทดสอบการส่งข้อความให้เรียบร้อยก่อนเริ่มใช้งานจริง
+          </li>
         </ol>
-        <button type="button" class="btn btn-primary w-100 mt" onclick="runSystemSetup()">ตั้งค่าเริ่มต้นระบบ</button>
+        <button
+          type="button"
+          class="btn btn-primary w-100 mt"
+          onclick="runSystemSetup()"
+        >
+          ตั้งค่าเริ่มต้นระบบ
+        </button>
       </div>
       <div class="setup-step-actions">
         <span></span>
-        <button type="button" class="btn btn-primary" onclick="nextSetupStep()">ถัดไป</button>
+        <button type="button" class="btn btn-primary" onclick="nextSetupStep()">
+          ถัดไป
+        </button>
       </div>
     </div>
 
@@ -58,21 +116,45 @@
     <div class="setup-step" data-step="2">
       <div class="card">
         <h3>ตั้งค่า LINE Reminder</h3>
-        <form id="line-form" onsubmit="event.preventDefault(); saveLineSetup();">
+        <form
+          id="line-form"
+          onsubmit="
+            event.preventDefault();
+            saveLineSetup();
+          "
+        >
           <div class="form-group">
             <label for="line-token">Channel Access Token</label>
-            <input type="password" id="line-token" placeholder="ใส่ Channel Access Token">
+            <input
+              type="password"
+              id="line-token"
+              placeholder="ใส่ Channel Access Token"
+            />
           </div>
           <div class="form-group">
             <label for="line-user-id">User ID (แจ้งเตือนส่วนตัว)</label>
             <div class="form-row">
-              <input type="text" id="line-user-id" placeholder="ใส่ LINE User ID">
-              <button type="button" class="btn btn-secondary" onclick="fetchLatestUserId()">ดึงล่าสุด</button>
+              <input
+                type="text"
+                id="line-user-id"
+                placeholder="ใส่ LINE User ID"
+              />
+              <button
+                type="button"
+                class="btn btn-secondary"
+                onclick="fetchLatestUserId()"
+              >
+                ดึงล่าสุด
+              </button>
             </div>
           </div>
           <div class="form-group">
             <label for="web-app-url">ลิงก์ Dashboard (Web App URL)</label>
-            <input type="url" id="web-app-url" placeholder="https://script.google.com/macros/s/.../exec">
+            <input
+              type="url"
+              id="web-app-url"
+              placeholder="https://script.google.com/macros/s/.../exec"
+            />
           </div>
           <div class="form-row">
             <div class="form-group">
@@ -87,26 +169,71 @@
             </div>
             <div class="form-group">
               <label for="timezone-display">Timezone</label>
-              <input type="text" id="timezone-display" value="Asia/Bangkok" readonly>
+              <input
+                type="text"
+                id="timezone-display"
+                value="Asia/Bangkok"
+                readonly
+              />
             </div>
           </div>
           <div class="form-group flex-between">
             <label>สถานะ Trigger</label>
-            <span id="trigger-status" class="status-pill inactive">ปิดอยู่</span>
+            <span id="trigger-status" class="status-pill inactive"
+              >ปิดอยู่</span
+            >
           </div>
           <div class="form-row mt">
-            <button type="button" class="btn btn-success" onclick="setupTrigger()">เปิด Trigger</button>
-            <button type="button" class="btn btn-danger" onclick="removeTrigger()">ปิด Trigger</button>
-            <button type="button" class="btn btn-warning" onclick="testLineMessage()">ทดสอบ LINE</button>
-            <button type="button" class="btn btn-info" onclick="runReminderCheckNow()">รันเช็คเดี๋ยวนี้</button>
+            <button
+              type="button"
+              class="btn btn-success"
+              onclick="setupTrigger()"
+            >
+              เปิด Trigger
+            </button>
+            <button
+              type="button"
+              class="btn btn-danger"
+              onclick="removeTrigger()"
+            >
+              ปิด Trigger
+            </button>
+            <button
+              type="button"
+              class="btn btn-warning"
+              onclick="testLineMessage()"
+            >
+              ทดสอบ LINE
+            </button>
+            <button
+              type="button"
+              class="btn btn-info"
+              onclick="runReminderCheckNow()"
+            >
+              รันเช็คเดี๋ยวนี้
+            </button>
           </div>
-          <div id="last-run-info" class="text-secondary mt" style="font-size: 0.85rem;"></div>
-          <button type="submit" class="btn btn-primary w-100 mt">บันทึกการตั้งค่า LINE</button>
+          <div
+            id="last-run-info"
+            class="text-secondary mt"
+            style="font-size: 0.85rem"
+          ></div>
+          <button type="submit" class="btn btn-primary w-100 mt">
+            บันทึกการตั้งค่า LINE
+          </button>
         </form>
       </div>
       <div class="setup-step-actions">
-        <button type="button" class="btn btn-secondary" onclick="prevSetupStep()">ย้อนกลับ</button>
-        <button type="button" class="btn btn-primary" onclick="nextSetupStep()">ถัดไป</button>
+        <button
+          type="button"
+          class="btn btn-secondary"
+          onclick="prevSetupStep()"
+        >
+          ย้อนกลับ
+        </button>
+        <button type="button" class="btn btn-primary" onclick="nextSetupStep()">
+          ถัดไป
+        </button>
       </div>
     </div>
 
@@ -117,23 +244,58 @@
         <ul class="settings-list" id="line-group-list">
           <li class="empty-state">ไม่มีกลุ่ม</li>
         </ul>
-        <form onsubmit="event.preventDefault(); addLineGroup();">
+        <form
+          onsubmit="
+            event.preventDefault();
+            addLineGroup();
+          "
+        >
           <div class="form-row">
-            <input type="text" id="new-line-group-id" placeholder="LINE Group ID" required>
-            <input type="text" id="new-line-group-name" placeholder="ชื่อกลุ่ม (หรือเว้นว่าง)" style="flex: 1.5;">
+            <input
+              type="text"
+              id="new-line-group-id"
+              placeholder="LINE Group ID"
+              required
+            />
+            <input
+              type="text"
+              id="new-line-group-name"
+              placeholder="ชื่อกลุ่ม (หรือเว้นว่าง)"
+              style="flex: 1.5"
+            />
           </div>
           <div class="form-row mt">
-            <button type="submit" class="btn btn-primary w-100">เพิ่มกลุ่ม</button>
+            <button type="submit" class="btn btn-primary w-100">
+              เพิ่มกลุ่ม
+            </button>
           </div>
         </form>
         <div class="form-row mt">
-          <button type="button" class="btn btn-secondary w-100" onclick="fetchLatestGroupId()">ดึง Group ID ล่าสุดจาก Webhook เพิ่มกลุ่ม</button>
+          <button
+            type="button"
+            class="btn btn-secondary w-100"
+            onclick="fetchLatestGroupId()"
+          >
+            ดึง Group ID ล่าสุดจาก Webhook เพิ่มกลุ่ม
+          </button>
         </div>
-        <small class="text-secondary" style="display:block; margin-top:8px;">หากชื่อเว้นว่าง ระบบจะพยายามดึงชื่อจาก LINE Group Summary API ขณะ Bot อยู่ในกลุ่มนั้น สูงสุด 11 กลุ่ม (สงวน 2 ช่องให้ปุ่ม “เฉพาะฉัน” และ “ฉันและกลุ่ม LINE ทั้งหมด”)</small>
+        <small class="text-secondary" style="display: block; margin-top: 8px"
+          >หากชื่อเว้นว่าง ระบบจะพยายามดึงชื่อจาก LINE Group Summary API ขณะ Bot
+          อยู่ในกลุ่มนั้น สูงสุด 11 กลุ่ม (สงวน 2 ช่องให้ปุ่ม “เฉพาะฉัน” และ
+          “ฉันและกลุ่ม LINE ทั้งหมด”)</small
+        >
       </div>
       <div class="setup-step-actions">
-        <button type="button" class="btn btn-secondary" onclick="prevSetupStep()">ย้อนกลับ</button>
-        <button type="button" class="btn btn-primary" onclick="nextSetupStep()">ถัดไป</button>
+        <button
+          type="button"
+          class="btn btn-secondary"
+          onclick="prevSetupStep()"
+        >
+          ย้อนกลับ
+        </button>
+        <button type="button" class="btn btn-primary" onclick="nextSetupStep()">
+          ถัดไป
+        </button>
       </div>
     </div>
 
@@ -146,17 +308,41 @@
           <ul class="settings-list" id="finance-category-list">
             <li class="empty-state">ไม่มีหมวดหมู่</li>
           </ul>
-          <form onsubmit="event.preventDefault(); addFinanceCategory();">
+          <form
+            onsubmit="
+              event.preventDefault();
+              addFinanceCategory();
+            "
+          >
             <div class="form-row">
-              <input type="text" id="new-finance-name" placeholder="ชื่อหมวดหมู่" required>
+              <input
+                type="text"
+                id="new-finance-name"
+                placeholder="ชื่อหมวดหมู่"
+                required
+              />
               <select id="new-finance-type" required>
                 <option value="รายจ่าย" selected>รายจ่าย</option>
                 <option value="รายรับ">รายรับ</option>
               </select>
-              <input type="text" id="new-finance-icon" placeholder="ไอคอน Emoji" value="" placeholder="ไอคอน" maxlength="2">
-              <input type="color" id="new-finance-color" class="color-input" value="#EF4444">
+              <input
+                type="text"
+                id="new-finance-icon"
+                placeholder="ไอคอน Emoji"
+                value=""
+                placeholder="ไอคอน"
+                maxlength="2"
+              />
+              <input
+                type="color"
+                id="new-finance-color"
+                class="color-input"
+                value="#EF4444"
+              />
             </div>
-            <button type="submit" class="btn btn-primary w-100 mt">เพิ่มหมวดหมู่</button>
+            <button type="submit" class="btn btn-primary w-100 mt">
+              เพิ่มหมวดหมู่
+            </button>
           </form>
         </div>
 
@@ -166,18 +352,44 @@
           <ul class="settings-list" id="category-list">
             <li class="empty-state">ไม่มีหมวดหมู่</li>
           </ul>
-          <form onsubmit="event.preventDefault(); addCategory();">
+          <form
+            onsubmit="
+              event.preventDefault();
+              addCategory();
+            "
+          >
             <div class="form-row">
-              <input type="text" id="new-category-name" placeholder="ชื่อหมวดหมู่" required>
-              <input type="color" id="new-category-color" class="color-input" value="#006664" title="เลือกสี">
+              <input
+                type="text"
+                id="new-category-name"
+                placeholder="ชื่อหมวดหมู่"
+                required
+              />
+              <input
+                type="color"
+                id="new-category-color"
+                class="color-input"
+                value="#006664"
+                title="เลือกสี"
+              />
             </div>
-            <button type="submit" class="btn btn-primary w-100 mt">เพิ่มหมวดหมู่</button>
+            <button type="submit" class="btn btn-primary w-100 mt">
+              เพิ่มหมวดหมู่
+            </button>
           </form>
         </div>
       </div>
       <div class="setup-step-actions">
-        <button type="button" class="btn btn-secondary" onclick="prevSetupStep()">ย้อนกลับ</button>
-        <button type="button" class="btn btn-primary" onclick="nextSetupStep()">ถัดไป</button>
+        <button
+          type="button"
+          class="btn btn-secondary"
+          onclick="prevSetupStep()"
+        >
+          ย้อนกลับ
+        </button>
+        <button type="button" class="btn btn-primary" onclick="nextSetupStep()">
+          ถัดไป
+        </button>
       </div>
     </div>
 
@@ -186,50 +398,122 @@
       <div class="card">
         <h3>LINE Rich Menu</h3>
         <div class="form-group">
-          <label for="rich-menu-file-id">Google Drive File ID รูป Rich Menu</label>
-          <input type="text" id="rich-menu-file-id" value="1r6oY0gwQQhUouAZqX4r_qcDUizhG84K1" placeholder="ใส่ File ID จาก Google Drive">
+          <label for="rich-menu-file-id"
+            >Google Drive File ID รูป Rich Menu</label
+          >
+          <input
+            type="text"
+            id="rich-menu-file-id"
+            value="1r6oY0gwQQhUouAZqX4r_qcDUizhG84K1"
+            placeholder="ใส่ File ID จาก Google Drive"
+          />
         </div>
         <div class="form-group">
           <label>Rich Menu ID ปัจจุบัน</label>
-          <input type="text" id="rich-menu-id-display" value="" readonly placeholder="ยังไม่มี Rich Menu">
+          <input
+            type="text"
+            id="rich-menu-id-display"
+            value=""
+            readonly
+            placeholder="ยังไม่มี Rich Menu"
+          />
         </div>
         <div class="form-row mt">
-          <button type="button" class="btn btn-primary" onclick="createRichMenu()">สร้างและตั้งค่า Rich Menu</button>
-          <button type="button" class="btn btn-info" onclick="uploadRichMenuImage()">อัปโหลดรูปใหม่</button>
-          <button type="button" class="btn btn-warning" onclick="retrySetDefaultRichMenu()">ตั้งค่า default ใหม่</button>
-          <button type="button" class="btn btn-danger" onclick="deleteRichMenus()">ลบ Rich Menu ทั้งหมด</button>
+          <button
+            type="button"
+            class="btn btn-primary"
+            onclick="createRichMenu()"
+          >
+            สร้างและตั้งค่า Rich Menu
+          </button>
+          <button
+            type="button"
+            class="btn btn-info"
+            onclick="uploadRichMenuImage()"
+          >
+            อัปโหลดรูปใหม่
+          </button>
+          <button
+            type="button"
+            class="btn btn-warning"
+            onclick="retrySetDefaultRichMenu()"
+          >
+            ตั้งค่า default ใหม่
+          </button>
+          <button
+            type="button"
+            class="btn btn-danger"
+            onclick="deleteRichMenus()"
+          >
+            ลบ Rich Menu ทั้งหมด
+          </button>
         </div>
-        <div id="rich-menu-warning" class="text-secondary mt" style="font-size: 0.85rem; color: #d97706;"></div>
+        <div
+          id="rich-menu-warning"
+          class="text-secondary mt"
+          style="font-size: 0.85rem; color: #d97706"
+        ></div>
       </div>
       <div class="setup-step-actions">
-        <button type="button" class="btn btn-secondary" onclick="prevSetupStep()">ย้อนกลับ</button>
-        <button type="button" class="btn btn-primary" onclick="goToSetupStep(1)">กลับไปขั้นตอนแรก</button>
+        <button
+          type="button"
+          class="btn btn-secondary"
+          onclick="prevSetupStep()"
+        >
+          ย้อนกลับ
+        </button>
+        <button
+          type="button"
+          class="btn btn-primary"
+          onclick="goToSetupStep(1)"
+        >
+          กลับไปขั้นตอนแรก
+        </button>
       </div>
     </div>
-
+    
   </div>
 
   <!-- Task Category Edit Modal -->
   <div class="modal-overlay" id="category-edit-modal">
     <div class="modal">
-      <form id="category-edit-form" onsubmit="event.preventDefault(); submitCategoryEdit();">
+      <form
+        id="category-edit-form"
+        onsubmit="
+          event.preventDefault();
+          submitCategoryEdit();
+        "
+      >
         <div class="modal-header">
           <h3>แก้ไขหมวดหมู่ภารกิจ</h3>
-          <button type="button" onclick="closeModal('category-edit-modal')">&times;</button>
+          <button type="button" onclick="closeModal('category-edit-modal')">
+            &times;
+          </button>
         </div>
         <div class="modal-body">
-          <input type="hidden" id="category-edit-old-name">
+          <input type="hidden" id="category-edit-old-name" />
           <div class="form-group">
             <label>ชื่อหมวดหมู่</label>
-            <input type="text" id="category-edit-name" required>
+            <input type="text" id="category-edit-name" required />
           </div>
           <div class="form-group">
             <label>สี</label>
-            <input type="color" id="category-edit-color" class="color-input" required>
+            <input
+              type="color"
+              id="category-edit-color"
+              class="color-input"
+              required
+            />
           </div>
         </div>
         <div class="modal-footer">
-          <button type="button" class="btn btn-outline" onclick="closeModal('category-edit-modal')">ยกเลิก</button>
+          <button
+            type="button"
+            class="btn btn-outline"
+            onclick="closeModal('category-edit-modal')"
+          >
+            ยกเลิก
+          </button>
           <button type="submit" class="btn btn-primary">บันทึก</button>
         </div>
       </form>
@@ -239,17 +523,28 @@
   <!-- Finance Category Edit Modal -->
   <div class="modal-overlay" id="finance-category-edit-modal">
     <div class="modal">
-      <form id="finance-category-edit-form" onsubmit="event.preventDefault(); submitFinanceCategoryEdit();">
+      <form
+        id="finance-category-edit-form"
+        onsubmit="
+          event.preventDefault();
+          submitFinanceCategoryEdit();
+        "
+      >
         <div class="modal-header">
           <h3>แก้ไขหมวดหมู่การเงิน</h3>
-          <button type="button" onclick="closeModal('finance-category-edit-modal')">&times;</button>
+          <button
+            type="button"
+            onclick="closeModal('finance-category-edit-modal')"
+          >
+            &times;
+          </button>
         </div>
         <div class="modal-body">
-          <input type="hidden" id="finance-category-edit-old-name">
+          <input type="hidden" id="finance-category-edit-old-name" />
           <div class="form-row">
             <div class="form-group">
               <label>ชื่อหมวดหมู่</label>
-              <input type="text" id="finance-category-edit-name" required>
+              <input type="text" id="finance-category-edit-name" required />
             </div>
             <div class="form-group">
               <label>ประเภท</label>
@@ -262,16 +557,32 @@
           <div class="form-row">
             <div class="form-group">
               <label>ไอคอน Emoji</label>
-              <input type="text" id="finance-category-edit-icon" maxlength="2" required>
+              <input
+                type="text"
+                id="finance-category-edit-icon"
+                maxlength="2"
+                required
+              />
             </div>
             <div class="form-group">
               <label>สี</label>
-              <input type="color" id="finance-category-edit-color" class="color-input" required>
+              <input
+                type="color"
+                id="finance-category-edit-color"
+                class="color-input"
+                required
+              />
             </div>
           </div>
         </div>
         <div class="modal-footer">
-          <button type="button" class="btn btn-outline" onclick="closeModal('finance-category-edit-modal')">ยกเลิก</button>
+          <button
+            type="button"
+            class="btn btn-outline"
+            onclick="closeModal('finance-category-edit-modal')"
+          >
+            ยกเลิก
+          </button>
           <button type="submit" class="btn btn-primary">บันทึก</button>
         </div>
       </form>
