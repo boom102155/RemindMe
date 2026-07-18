@@ -1,0 +1,256 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+  <base target="_top">
+  <meta charset="UTF-8">
+  <title>แก้ไขรายการ - Remind Me</title>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <?!= include('style'); ?>
+  <style>
+    .type-toggle {
+      display: flex;
+      gap: 10px;
+    }
+    .type-option {
+      flex: 1;
+      padding: 12px;
+      border: 2px solid var(--border);
+      border-radius: 12px;
+      text-align: center;
+      cursor: pointer;
+      font-weight: 600;
+      transition: all 0.15s;
+      background: #fff;
+    }
+    .type-option.active.expense {
+      border-color: #DC2626;
+      background: #FEF2F2;
+      color: #DC2626;
+    }
+    .type-option.active.income {
+      border-color: #059669;
+      background: #ECFDF5;
+      color: #059669;
+    }
+    .amount-wrap {
+      position: relative;
+    }
+    .amount-wrap .currency {
+      position: absolute;
+      right: 14px;
+      top: 50%;
+      transform: translateY(-50%);
+      color: var(--text-secondary);
+      font-weight: 600;
+      font-size: 14px;
+    }
+    .toast {
+      position: fixed;
+      top: 20px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: var(--text);
+      color: #fff;
+      padding: 12px 20px;
+      border-radius: 12px;
+      font-size: 14px;
+      font-weight: 500;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.3s;
+      z-index: 100;
+    }
+    .toast.show { opacity: 1; }
+    .loading {
+      text-align: center;
+      color: var(--text-secondary);
+      padding: 40px 0;
+    }
+    .not-found {
+      text-align: center;
+      color: var(--danger);
+      padding: 40px 0;
+    }
+  </style>
+</head>
+<body class="standalone-page">
+  <div class="card standalone-card" id="app">
+    <div class="loading">กำลังโหลดข้อมูล...</div>
+  </div>
+  <div class="toast" id="toast"></div>
+
+  <script>
+    var SERVER_EDIT_FINANCE_ID = '<?= editFinanceId ?>' || '';
+  </script>
+
+  <script>
+    const transactionId = SERVER_EDIT_FINANCE_ID || null;
+    const app = document.getElementById('app');
+    const toastEl = document.getElementById('toast');
+    let record = null;
+    let categories = [];
+
+    function showToast(message, type) {
+      toastEl.textContent = message;
+      toastEl.style.background = type === 'error' ? 'var(--danger)' : 'var(--text)';
+      toastEl.classList.add('show');
+      setTimeout(() => toastEl.classList.remove('show'), 3000);
+    }
+
+    function formatDateInput(dateStr) {
+      if (!dateStr) return '';
+      const d = new Date(dateStr);
+      if (isNaN(d.getTime())) return dateStr;
+      const yyyy = d.getFullYear();
+      const mm = String(d.getMonth() + 1).padStart(2, '0');
+      const dd = String(d.getDate()).padStart(2, '0');
+      return yyyy + '-' + mm + '-' + dd;
+    }
+
+    function renderForm() {
+      const isExpense = record.type === 'รายจ่าย';
+      app.innerHTML = `
+        <div class="standalone-header">
+          <h1>แก้ไขรายการ</h1>
+          
+        </div>
+        <form id="edit-form" onsubmit="event.preventDefault(); saveRecord();">
+          <div class="form-group">
+            <label>รายละเอียด</label>
+            <input type="text" id="title" class="form-control" value="${escapeHtml(record.title)}" required>
+          </div>
+
+          <div class="form-group">
+            <label>ประเภทรายการ</label>
+            <div class="type-toggle" role="group" aria-label="ประเภทรายการ">
+              <div class="type-option expense ${isExpense ? 'active' : ''}" role="button" tabindex="0" aria-pressed="${isExpense ? 'true' : 'false'}" onclick="setType('รายจ่าย')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();setType('รายจ่าย');}">รายจ่าย</div>
+              <div class="type-option income ${!isExpense ? 'active' : ''}" role="button" tabindex="0" aria-pressed="${!isExpense ? 'true' : 'false'}" onclick="setType('รายรับ')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();setType('รายรับ');}">รายรับ</div>
+            </div>
+          </div>
+
+          <div class="form-group">
+            <label>หมวดหมู่</label>
+            <select id="category" class="form-control"></select>
+          </div>
+
+          <div class="form-group">
+            <label>ขอบเขต</label>
+            <select id="scope" class="form-control">
+              <option value="ส่วนตัว" ${record.scope === 'ส่วนตัว' ? 'selected' : ''}>ส่วนตัว</option>
+              <option value="ที่ทำงาน" ${record.scope === 'ที่ทำงาน' ? 'selected' : ''}>ที่ทำงาน</option>
+            </select>
+          </div>
+
+          <div class="form-group">
+            <label>จำนวนเงิน</label>
+            <div class="amount-wrap">
+              <input type="number" id="amount" class="form-control" value="${record.amount}" min="0" step="0.01" required>
+              <span class="currency">฿</span>
+            </div>
+          </div>
+
+          <div class="form-group">
+            <label>วันที่</label>
+            <input type="date" id="date" class="form-control" value="${formatDateInput(record.date)}" required>
+          </div>
+
+          <button type="submit" class="btn btn-primary w-100 mb" id="save-btn">บันทึก</button>
+          <button type="button" class="btn btn-delete w-100 mt" onclick="deleteRecord()">ลบรายการ</button>
+        </form>
+      `;
+      populateCategories();
+      document.getElementById('category').value = record.category || '';
+    }
+
+    function escapeHtml(text) {
+      const div = document.createElement('div');
+      div.textContent = text || '';
+      return div.innerHTML;
+    }
+
+    function populateCategories() {
+      const select = document.getElementById('category');
+      const currentType = document.querySelector('.type-option.active').textContent === 'รายจ่าย' ? 'รายจ่าย' : 'รายรับ';
+      select.innerHTML = categories
+        .filter(c => c.type === currentType)
+        .map(c => `<option value="${escapeHtml(c.name)}">${escapeHtml(c.name)}</option>`)
+        .join('');
+      if (record.category && categories.some(c => c.name === record.category && c.type === currentType)) {
+        select.value = record.category;
+      }
+    }
+
+    function setType(type) {
+      document.querySelectorAll('.type-option').forEach(el => el.classList.remove('active'));
+      const target = type === 'รายจ่าย' ? document.querySelector('.type-option.expense') : document.querySelector('.type-option.income');
+      target.classList.add('active');
+      populateCategories();
+    }
+
+    function saveRecord() {
+      const btn = document.getElementById('save-btn');
+      btn.disabled = true;
+      btn.textContent = 'กำลังบันทึก...';
+
+      const data = {
+        title: document.getElementById('title').value.trim(),
+        type: document.querySelector('.type-option.active').textContent,
+        category: document.getElementById('category').value,
+        scope: document.getElementById('scope').value || 'ส่วนตัว',
+        amount: parseFloat(document.getElementById('amount').value) || 0,
+        date: document.getElementById('date').value
+      };
+
+      google.script.run
+        .withSuccessHandler(() => {
+          showToast('บันทึกรายการสำเร็จ', 'success');
+          btn.textContent = 'บันทึกแล้ว';
+          setTimeout(() => {
+            btn.disabled = false;
+            btn.textContent = 'บันทึก';
+          }, 2000);
+        })
+        .withFailureHandler(err => {
+          showToast('บันทึกไม่สำเร็จ: ' + err.message, 'error');
+          btn.disabled = false;
+          btn.textContent = 'บันทึก';
+        })
+        .updateFinanceRecord(transactionId, data);
+    }
+
+    function deleteRecord() {
+      if (!confirm('คุณแน่ใจหรือไม่ว่าต้องการลบรายการนี้?')) return;
+      google.script.run
+        .withSuccessHandler(() => {
+          showToast('ลบรายการสำเร็จ', 'success');
+          app.innerHTML = '<div class="loading">ลบรายการแล้ว คุณสามารถปิดหน้านี้ได้</div>';
+        })
+        .withFailureHandler(err => showToast('ลบไม่สำเร็จ: ' + err.message, 'error'))
+        .deleteFinanceRecord(transactionId);
+    }
+
+    function loadData() {
+      if (!transactionId) {
+        app.innerHTML = '<div class="not-found">ไม่พบรหัสรายการ<br><small style="color:#6B7280">URL: ' + escapeHtml(window.location.href) + '</small></div>';
+        return;
+      }
+      google.script.run
+        .withSuccessHandler(result => {
+          categories = result.categories || [];
+          record = result.record;
+          if (!record) {
+            app.innerHTML = '<div class="not-found">ไม่พบรายการนี้ในระบบ<br><small style="color:#6B7280">ID: ' + escapeHtml(transactionId) + '</small></div>';
+            return;
+          }
+          renderForm();
+        })
+        .withFailureHandler(err => {
+          app.innerHTML = '<div class="not-found">โหลดข้อมูลไม่สำเร็จ: ' + err.message + '<br><small style="color:#6B7280">ID: ' + escapeHtml(transactionId) + '</small></div>';
+        })
+        .getFinanceRecordWithCategories(transactionId);
+    }
+
+    loadData();
+  </script>
+</body>
+</html>

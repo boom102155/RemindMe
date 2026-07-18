@@ -1,0 +1,295 @@
+<div id="page-dashboard" class="page active">
+  <div class="topbar">
+    <div>
+      <h1>แดชบอร์ด</h1>
+      <p id="current-date-label">กำลังโหลด...</p>
+    </div>
+    <div class="dashboard-summary">
+      <div class="summary-date">แผนประจำวันที่ <span id="dash-selected-date">-</span></div>
+      <div class="summary-pills">
+        <div class="summary-pill pending">
+          <div>
+            <div class="pill-value" id="dash-top-pending">0</div>
+            <div class="pill-label">รอดำเนินการ</div>
+          </div>
+        </div>
+        <div class="summary-pill done">
+          <div>
+            <div class="pill-value" id="dash-top-done">0</div>
+            <div class="pill-label">เสร็จแล้ว</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="cards-grid">
+    <div class="card stat-card blue">
+      <div class="stat-value" id="dash-total-today">0</div>
+      <div class="stat-label">งานวันนี้</div>
+    </div>
+    <div class="card stat-card orange">
+      <div class="stat-value" id="dash-pending">0</div>
+      <div class="stat-label">รอดำเนินการ</div>
+    </div>
+    <div class="card stat-card green">
+      <div class="stat-value" id="dash-completed">0</div>
+      <div class="stat-label">เสร็จสิ้น</div>
+    </div>
+    <div class="card stat-card red">
+      <div class="stat-value" id="dash-balance">฿0</div>
+      <div class="stat-label">คงเหลือวันนี้</div>
+    </div>
+  </div>
+
+  <div class="dashboard-grid">
+    <div class="card calendar-card">
+      <div class="calendar-header">
+        <div class="calendar-nav">
+          <button type="button" class="btn btn-icon" onclick="changeMonth(-1)">&#10094;</button>
+          <div class="calendar-title">
+            <select id="calendar-month-select" onchange="handleMonthChange()"></select>
+            <select id="calendar-year-select" onchange="handleMonthChange()"></select>
+          </div>
+          <button type="button" class="btn btn-icon" onclick="changeMonth(1)">&#10095;</button>
+        </div>
+        <div class="calendar-actions">
+          <button type="button" class="btn btn-secondary" onclick="setToday()">กลับสู่วันนี้</button>
+          <button type="button" class="btn btn-primary" onclick="openTaskModal()">+ เพิ่มงานใหม่</button>
+        </div>
+      </div>
+      <div class="calendar-grid" id="calendar-grid">
+        <!-- JS render -->
+      </div>
+    </div>
+
+    <div class="card today-card">
+      <div class="today-card-header">
+        <div class="today-card-title">
+          <span class="dot"></span>
+          <span>งานที่เลือกวันนี้</span>
+        </div>
+        <div class="today-card-date" id="today-card-date">-</div>
+      </div>
+
+      <div class="today-card-body">
+        <ul id="today-task-list">
+          <li class="empty-state-card">
+            <div class="empty-state-icon">◇</div>
+            <div class="empty-state-title">ไม่มีงานในวันนี้</div>
+            <div class="empty-state-sub">เพิ่มภารกิจเพื่อวางแผนวันนี้</div>
+          </li>
+        </ul>
+
+        <h4 class="today-section-title">บัญชีรายรับ-รายจ่าย</h4>
+        <ul id="today-finance-list">
+          <li class="empty-state-card">
+            <div class="empty-state-icon">◇</div>
+            <div class="empty-state-title">ไม่มีรายการ</div>
+            <div class="empty-state-sub">บันทึกรายรับ-รายจ่ายของวันนี้</div>
+          </li>
+        </ul>
+      </div>
+
+      <div class="today-card-footer">
+        <button class="btn btn-today-action" onclick="openTaskModal(null, state.selectedDate || todayStorage())">
+          <span class="icon">+</span> เพิ่มภารกิจ
+        </button>
+        <button class="btn btn-today-action" onclick="openFinanceModal(null, state.selectedDate || todayStorage())">
+          <span class="icon">+</span> เพิ่มรายรับ-รายจ่าย
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Day Tasks Modal -->
+<div class="modal-overlay" id="day-modal">
+  <div class="modal day-modal">
+    <div class="modal-header modal-header-primary">
+      <div class="modal-header-title">
+        <span class="modal-header-icon">+</span>
+        <div>
+          <h3 id="day-modal-title">ภารกิจประจำวัน</h3>
+          <p id="day-modal-subtitle" class="modal-header-subtitle"></p>
+        </div>
+      </div>
+      <button type="button" class="modal-close" onclick="closeModal('day-modal')">&times;</button>
+    </div>
+    <div class="modal-body day-modal-body" id="day-modal-body">
+      <!-- JS render -->
+    </div>
+    <div class="modal-footer day-modal-footer">
+      <a href="#" class="open-tasks-link" onclick="closeModal('day-modal'); navigateTo('tasks'); return false;">
+        เปิดหน้าแก้ไขงาน
+      </a>
+      <div class="day-modal-actions">
+        <button type="button" class="btn btn-outline" onclick="closeModal('day-modal')">ปิดหน้าต่าง</button>
+        <button type="button" class="btn btn-primary" onclick="openTaskModal(null, state.selectedDate)">+ เพิ่มงาน</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Task Modal -->
+<div class="modal-overlay" id="task-modal">
+  <div class="modal">
+    <form id="task-form" onsubmit="event.preventDefault(); submitTaskForm();">
+      <div class="modal-header modal-header-primary">
+        <div class="modal-header-title">
+          <span class="modal-header-icon">+</span>
+          <h3 id="task-modal-title">สร้างงานใหม่</h3>
+        </div>
+        <button type="button" class="modal-close" onclick="closeModal('task-modal')">&times;</button>
+      </div>
+      <div class="modal-body">
+        <input type="hidden" id="task-id">
+        <input type="hidden" id="task-status" value="Pending">
+        <input type="hidden" id="task-priority" value="Medium">
+
+        <div class="form-group">
+          <label for="task-title">ชื่องาน / กิจกรรมสำคัญ <span class="text-danger">*</span></label>
+          <input type="text" id="task-title" placeholder="ระบุหัวข้อ เช่น วางแผนพัฒนาตัวแปรระบบ, ออกกำลังกาย..." required>
+        </div>
+
+        <div class="form-group">
+          <label for="task-description">คำอธิบายเพิ่มเติม</label>
+          <textarea id="task-description" placeholder="ระบุสิ่งที่ต้องจัดเตรียม เอกสารที่เกี่ยวข้อง หรือรายละเอียดเพิ่มเติม..."></textarea>
+        </div>
+
+        <div class="form-group all-day-toggle-group">
+          <div class="all-day-toggle-row vertical">
+            <span class="all-day-label">ทั้งวัน</span>
+            <label class="toggle-label">
+              <input type="checkbox" id="task-all-day" onchange="toggleAllDay()">
+              <span class="toggle-switch"></span>
+            </label>
+          </div>
+        </div>
+
+        <div class="form-row three">
+          <div class="form-group">
+            <label for="task-date">วันที่ระบุ <span class="text-danger">*</span></label>
+            <input type="date" id="task-date" required onchange="updateReminderOptions()">
+          </div>
+          <div class="form-group">
+            <label for="task-start-time">เวลาเริ่ม</label>
+            <input type="time" id="task-start-time" onchange="updateReminderOptions()">
+          </div>
+          <div class="form-group">
+            <label for="task-end-time">เวลาเสร็จ</label>
+            <input type="time" id="task-end-time">
+          </div>
+        </div>
+
+        <div class="form-row">
+          <div class="form-group">
+            <label>ระดับความสำคัญ <span class="text-danger">*</span></label>
+            <div class="priority-options">
+              <button type="button" class="priority-btn priority-low" data-value="Low" onclick="setPriority('Low')">ต่ำ</button>
+              <button type="button" class="priority-btn priority-medium active" data-value="Medium" onclick="setPriority('Medium')">กลาง</button>
+              <button type="button" class="priority-btn priority-high" data-value="High" onclick="setPriority('High')">สูง</button>
+            </div>
+          </div>
+          <div class="form-group">
+            <label for="task-category">หมวดหมู่ภารกิจ <span class="text-danger">*</span></label>
+            <select id="task-category" class="select-category" required></select>
+          </div>
+        </div>
+
+        <div class="line-reminder-box">
+          <div class="line-reminder-left">
+            <input type="checkbox" id="task-line-reminder" onchange="toggleReminderSelect()">
+            <label for="task-line-reminder" class="line-label">
+              <span class="line-badge">LINE</span>
+              <span>ส่ง LINE Bot เตือน</span>
+            </label>
+          </div>
+          <div class="line-reminder-right">
+            <label for="task-reminder">เตือนก่อน</label>
+            <select id="task-reminder" disabled>
+              <option value="">เลือกเวลาแจ้งเตือน</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="line-reminder-box" id="task-notify-target-box">
+          <div class="line-reminder-left">
+            <label for="task-notify-target" class="line-label">
+              <span>เป้าหมายการแจ้งเตือน</span>
+            </label>
+          </div>
+          <div class="line-reminder-right">
+            <select id="task-notify-target" disabled>
+              <option value="false">เฉพาะฉัน</option>
+              <option value="__all__">ฉันและทุกกลุ่ม LINE</option>
+              <option value="__select__">ฉันและกลุ่มที่เลือก</option>
+            </select>
+            <div id="task-notify-groups" class="group-checkboxes" style="display:none; margin-top:8px;"></div>
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-outline" onclick="closeModal('task-modal')">ยกเลิก</button>
+        <button type="submit" class="btn btn-primary">บันทึกรายการ</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- Finance Modal -->
+<div class="modal-overlay" id="finance-modal">
+  <div class="modal">
+    <form id="finance-form" onsubmit="event.preventDefault(); submitFinanceForm();">
+      <div class="modal-header">
+        <h3 id="finance-modal-title">เพิ่มรายรับ-รายจ่าย</h3>
+        <button type="button" onclick="closeModal('finance-modal')">&times;</button>
+      </div>
+      <div class="modal-body">
+        <input type="hidden" id="finance-id">
+        <div class="form-row">
+          <div class="form-group">
+            <label for="finance-type">ประเภท <span class="text-secondary">*</span></label>
+            <select id="finance-type" required>
+              <option value="รายรับ">รายรับ</option>
+              <option value="รายจ่าย">รายจ่าย</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label for="finance-amount">จำนวนเงิน <span class="text-secondary">*</span></label>
+            <input type="number" id="finance-amount" min="0" step="0.01" required>
+          </div>
+        </div>
+        <div class="form-group">
+          <label for="finance-title">ชื่อรายการ <span class="text-secondary">*</span></label>
+          <input type="text" id="finance-title" required>
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label for="finance-category">หมวดหมู่</label>
+            <select id="finance-category"></select>
+          </div>
+          <div class="form-group">
+            <label for="finance-scope">ขอบเขต</label>
+            <select id="finance-scope">
+              <option value="ส่วนตัว">ส่วนตัว</option>
+              <option value="ที่ทำงาน">ที่ทำงาน</option>
+            </select>
+          </div>
+        </div>
+        <div class="form-group">
+          <label for="finance-date">วันที่ <span class="text-secondary">*</span></label>
+          <input type="date" id="finance-date" required>
+        </div>
+        <div class="form-group">
+          <label for="finance-note">หมายเหตุ</label>
+          <textarea id="finance-note"></textarea>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" onclick="closeModal('finance-modal')">ยกเลิก</button>
+        <button type="submit" class="btn btn-primary">บันทึก</button>
+      </div>
+    </form>
+  </div>
+</div>

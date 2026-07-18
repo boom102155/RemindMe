@@ -1,0 +1,57 @@
+<div id="page-tasks" class="page">
+  <div class="topbar">
+    <div>
+      <h1>คลังภารกิจทั้งหมด</h1>
+      <p>จัดการงานและกิจกรรมสำคัญทั้งหมดของคุณ</p>
+    </div>
+    <button class="btn btn-primary" onclick="openTaskModal()">+ เพิ่มภารกิจ</button>
+  </div>
+
+  <div class="card filters-card">
+    <div class="filters">
+      <input type="date" id="task-filter-date" placeholder="วันที่">
+      <select id="task-filter-status">
+        <option value="">ทุกสถานะ</option>
+        <option value="Pending">รอดำเนินการ</option>
+        <option value="In Progress">กำลังดำเนินการ</option>
+        <option value="Done">เสร็จสิ้น</option>
+      </select>
+      <select id="task-filter-priority">
+        <option value="">ทุกความเร่งด่วน</option>
+        <option value="Low">ต่ำ</option>
+        <option value="Medium">กลาง</option>
+        <option value="High">สูง</option>
+      </select>
+      <select id="task-filter-category">
+        <option value="">ทุกหมวดหมู่</option>
+      </select>
+      <input type="text" id="task-search" placeholder="ค้นหางาน...">
+      <button type="button" class="btn btn-primary" onclick="applyTaskFilters()">กรอง</button>
+      <button type="button" class="btn btn-outline" onclick="resetTaskFilters()">รีเซ็ต</button>
+    </div>
+  </div>
+
+  <div class="card table-card">
+    <table class="data-table">
+      <thead>
+        <tr>
+          <th>ชื่องาน</th>
+          <th>วันที่</th>
+          <th>เวลา</th>
+          <th>ความเร่งด่วน</th>
+          <th>หมวดหมู่</th>
+          <th>สถานะ</th>
+          <th>LINE เตือน</th>
+          <th style="width:120px">จัดการ</th>
+        </tr>
+      </thead>
+      <tbody id="tasks-table-body">
+        <tr><td colspan="8" class="empty-state">
+          <div class="empty-state-title" style="margin-top:12px;">ยังไม่มีงาน</div>
+          <div class="empty-state-sub">เริ่มต้นด้วยการเพิ่มภารกิจแรก</div>
+          <button type="button" class="btn btn-primary mt" onclick="openTaskModal()">+ เพิ่มงาน</button>
+        </td></tr>
+      </tbody>
+    </table>
+  </div>
+</div>
