@@ -1,0 +1,92 @@
+<div id="page-finance" class="page">
+  <div class="topbar">
+    <div>
+      <h1>รายรับ - รายจ่าย</h1>
+      <p>บันทึกและวิเคราะห์รายรับ-รายจ่ายของคุณ</p>
+    </div>
+    <div class="topbar-actions">
+      <button class="btn btn-primary" onclick="openFinanceModal()">+ เพิ่มรายการ</button>
+      <div class="export-group">
+        <select id="finance-export-format">
+          <option value="excel">Excel (.xlsx)</option>
+          <option value="pdf">PDF</option>
+          <option value="csv">CSV</option>
+        </select>
+        <button type="button" class="btn btn-secondary" onclick="exportFinanceReport()">ดาวน์โหลดรายงาน</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="cards-grid">
+    <div class="card stat-card green">
+      <div class="stat-value" id="fin-total-income">฿0</div>
+      <div class="stat-label">รายรับรวม</div>
+    </div>
+    <div class="card stat-card red">
+      <div class="stat-value" id="fin-total-expense">฿0</div>
+      <div class="stat-label">รายจ่ายรวม</div>
+    </div>
+    <div class="card stat-card blue">
+      <div class="stat-value" id="fin-balance">฿0</div>
+      <div class="stat-label">คงเหลือ</div>
+    </div>
+  </div>
+
+  <div class="card filters-card">
+    <div class="filters">
+      <select id="finance-period">
+        <option value="daily">รายวัน</option>
+        <option value="monthly" selected>รายเดือน</option>
+        <option value="yearly">รายปี</option>
+      </select>
+      <input type="date" id="finance-filter-date">
+      <select id="finance-filter-type">
+        <option value="">ทุกประเภท</option>
+        <option value="รายรับ">รายรับ</option>
+        <option value="รายจ่าย">รายจ่าย</option>
+      </select>
+      <select id="finance-filter-category">
+        <option value="">ทุกหมวดหมู่</option>
+      </select>
+      <select id="finance-filter-scope">
+        <option value="">ทุกขอบเขต</option>
+        <option value="ส่วนตัว">ส่วนตัว</option>
+        <option value="ที่ทำงาน">ที่ทำงาน</option>
+      </select>
+      <button type="button" class="btn btn-primary" onclick="applyFinanceFilters()">กรอง</button>
+      <button type="button" class="btn btn-outline" onclick="resetFinanceFilters()">รีเซ็ต</button>
+    </div>
+  </div>
+
+  <div class="dashboard-grid">
+    <div class="card">
+      <h3>ค่าใช้จ่ายแยกตามหมวดหมู่</h3>
+      <div class="chart-container">
+        <canvas id="expense-chart"></canvas>
+      </div>
+    </div>
+
+    <div class="card table-card">
+      <table class="data-table">
+        <thead>
+          <tr>
+            <th>วันที่</th>
+            <th>ประเภท</th>
+            <th>รายการ</th>
+            <th>หมวดหมู่</th>
+            <th>ขอบเขต</th>
+            <th>จำนวนเงิน</th>
+            <th style="width:100px">จัดการ</th>
+          </tr>
+        </thead>
+        <tbody id="finance-table-body">
+          <tr><td colspan="7" class="empty-state">
+            <div class="empty-state-title" style="margin-top:12px;">ยังไม่มีรายการ</div>
+            <div class="empty-state-sub">บันทึกรายรับหรือรายจ่ายรายการแรก</div>
+            <button type="button" class="btn btn-primary mt" onclick="openFinanceModal()">+ เพิ่มรายการ</button>
+          </td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>

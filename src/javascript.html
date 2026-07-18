@@ -1,0 +1,2033 @@
+<script>
+  /* ================= State ================= */
+  const state = {
+    currentPage: 'dashboard',
+    calendarDate: new Date(),
+    selectedDate: null,
+    categories: [],
+    financeCategories: [],
+    lineGroups: [],
+    settings: {},
+    tasks: [],
+    financeRecords: [],
+    todayFinanceRecords: [],
+    financeSummary: { income: 0, expense: 0, balance: 0 },
+    charts: {},
+    dataLoaded: false,
+    financeLoaded: false
+  };
+
+  const STORAGE_KEY = 'smart_calendar_state';
+
+  function loadCachedState() {
+    try {
+      const raw = localStorage.getItem(STORAGE_KEY);
+      if (!raw) return;
+      const cached = JSON.parse(raw);
+      if (Array.isArray(cached.tasks)) state.tasks = cached.tasks;
+      if (Array.isArray(cached.categories)) state.categories = cached.categories;
+      if (Array.isArray(cached.financeCategories)) state.financeCategories = cached.financeCategories;
+      if (Array.isArray(cached.lineGroups)) state.lineGroups = cached.lineGroups;
+      if (cached.settings && typeof cached.settings === 'object') state.settings = cached.settings;
+      if (cached.financeSummary && typeof cached.financeSummary === 'object') state.financeSummary = cached.financeSummary;
+      if (Array.isArray(cached.todayFinanceRecords)) state.todayFinanceRecords = cached.todayFinanceRecords;
+      if (Array.isArray(cached.financeRecords)) state.financeRecords = cached.financeRecords;
+      if (cached.financeLoaded) state.financeLoaded = true;
+    } catch (e) {
+      console.warn('loadCachedState failed:', e);
+    }
+  }
+
+  function saveStateToCache() {
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify({
+        tasks: state.tasks,
+        categories: state.categories,
+        financeCategories: state.financeCategories,
+        lineGroups: state.lineGroups,
+        settings: state.settings,
+        financeSummary: state.financeSummary,
+        todayFinanceRecords: state.todayFinanceRecords,
+        financeRecords: state.financeRecords,
+        financeLoaded: state.financeLoaded
+      }));
+    } catch (e) {
+      console.warn('saveStateToCache failed:', e);
+    }
+  }
+
+  const THAI_MONTHS = ['มกราคม','กุมภาพันธ์','มีนาคม','เมษายน','พฤษภาคม','มิถุนายน','กรกฎาคม','สิงหาคม','กันยายน','ตุลาคม','พฤศจิกายน','ธันวาคม'];
+  const THAI_DAYS = ['อา','จ','อ','พ','พฤ','ศ','ส'];
+
+  const STATUS_MAP = {
+    'Pending': {label: 'รอดำเนินการ', class: 'badge-status-pending'},
+    'In Progress': {label: 'กำลังดำเนินการ', class: 'badge-status-progress'},
+    'Done': {label: 'เสร็จสิ้น', class: 'badge-status-done'}
+  };
+
+  const PRIORITY_MAP = {
+    'Low': {label: 'ต่ำ', class: 'badge-low'},
+    'Medium': {label: 'กลาง', class: 'badge-medium'},
+    'High': {label: 'สูง', class: 'badge-high'}
+  };
+
+  /* ================= Utility ================= */
+  function pad(n) { return n < 10 ? '0' + n : n; }
+
+  function todayStorage() {
+    const d = new Date();
+    return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`;
+  }
+
+  function todayInputDate() {
+    const d = new Date();
+    return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`;
+  }
+
+  function toStorageDate(dateObj) {
+    const d = new Date(dateObj);
+    return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`;
+  }
+
+  function parseStorageDate(str) {
+    const parts = String(str).split('-');
+    if (parts.length !== 3) return null;
+    return new Date(parseInt(parts[0],10), parseInt(parts[1],10)-1, parseInt(parts[2],10));
+  }
+
+  function formatBE(storageDate) {
+    const p = parseStorageDate(storageDate);
+    if (!p) return storageDate;
+    return `${p.getDate()} ${THAI_MONTHS[p.getMonth()]} ${p.getFullYear() + 543}`;
+  }
+
+  function formatThaiLongDate(dateStr) {
+    const d = parseStorageDate(dateStr);
+    if (!d) return dateStr;
+    const dayOfWeek = THAI_DAYS[d.getDay()];
+    const dayNum = d.getDate();
+    const monthName = THAI_MONTHS[d.getMonth()];
+    const thaiYear = d.getFullYear() + 543;
+    return `วัน${dayOfWeek}ที่ ${dayNum} ${monthName} พ.ศ. ${thaiYear}`;
+  }
+
+  function formatThaiLongDateBE(dateStr) {
+    const d = parseStorageDate(dateStr);
+    if (!d) return dateStr;
+    const dayOfWeek = THAI_DAYS[d.getDay()];
+    const dayNum = d.getDate();
+    const monthName = THAI_MONTHS[d.getMonth()];
+    const thaiYear = d.getFullYear() + 543;
+    return `วัน${dayOfWeek}ที่ ${dayNum} ${monthName} ${thaiYear}`;
+  }
+
+  function formatMoney(n) {
+    return '฿' + Number(n || 0).toLocaleString('th-TH', {minimumFractionDigits: 0, maximumFractionDigits: 2});
+  }
+
+  function statusLabel(s) { return STATUS_MAP[s]?.label || s; }
+  function statusClass(s) { return STATUS_MAP[s]?.class || 'badge-status-pending'; }
+  function priorityLabel(p) { return PRIORITY_MAP[p]?.label || p; }
+  function priorityClass(p) { return PRIORITY_MAP[p]?.class || 'badge-medium'; }
+  function priorityColor(p) {
+    return { Low: '#10B981', Medium: '#F59E0B', High: '#EF4444' }[p] || '#94A3B8';
+  }
+
+  function categoryColor(name) {
+    const cat = state.categories.find(c => c.name === name);
+    return cat ? cat.color : '#94A3B8';
+  }
+
+  function categoryBadgeStyle(name) {
+    const color = categoryColor(name);
+    return `background:${color}15;color:${color};border-color:${color}33;`;
+  }
+
+  function getTasksByDateFromState(date) {
+    return state.tasks
+      .filter(t => t.task_date === date)
+      .sort((a, b) => (a.due_time || '').localeCompare(b.due_time || ''));
+  }
+
+  function getFinanceByDateFromState(date) {
+    return (state.financeRecords || [])
+      .filter(r => r.date === date)
+      .sort((a, b) => String(b.created_at || '').localeCompare(a.created_at || ''));
+  }
+
+  function getTasksForMonthFromState(year, month) {
+    return state.tasks.filter(t => {
+      const d = parseStorageDate(t.task_date);
+      return d && d.getFullYear() === year && d.getMonth() === month;
+    }).sort((a, b) => (a.task_date + (a.due_time || '')).localeCompare(b.task_date + (b.due_time || '')));
+  }
+
+  function getTaskStatsFromState(date) {
+    const tasks = state.tasks.filter(t => t.task_date === date);
+    return {
+      total: tasks.length,
+      pending: tasks.filter(t => t.status !== 'Done').length,
+      done: tasks.filter(t => t.status === 'Done').length,
+      urgent: tasks.filter(t => t.priority === 'High').length
+    };
+  }
+
+  async function refreshTasks() {
+    try {
+      state.tasks = await gsRun('getAllTasks') || [];
+      if (state.currentPage === 'dashboard') renderDashboard();
+      if (state.currentPage === 'tasks') loadTasks();
+    } catch (e) {
+      console.error('refreshTasks:', e);
+    }
+  }
+
+  function financeCategory(name) {
+    return state.financeCategories.find(c => c.name === name) || {icon:'', color:'#94A3B8', type:'รายจ่าย'};
+  }
+
+  /* ================= Google Apps Script Runner ================= */
+  function gsRun(fn, ...args) {
+    return new Promise((resolve, reject) => {
+      google.script.run
+        .withSuccessHandler(resolve)
+        .withFailureHandler(reject)
+        [fn](...args);
+    });
+  }
+
+  /* ================= Navigation ================= */
+  function navigateTo(page, skipLoad) {
+    state.currentPage = page;
+    document.querySelectorAll('.page').forEach(el => el.classList.remove('active'));
+    document.getElementById('page-' + page).classList.add('active');
+    document.querySelectorAll('.nav-links a').forEach(a => a.classList.toggle('active', a.dataset.page === page));
+    if (skipLoad) return;
+    if (page === 'dashboard') {
+      if (state.dataLoaded) renderDashboard();
+      else loadDashboard();
+    }
+    if (page === 'tasks') {
+      if (state.dataLoaded) renderTasksFromState();
+      else loadTasks();
+    }
+    if (page === 'finance') {
+      if (state.financeRecords.length) renderFinanceFromState();
+      loadFinance();
+    }
+    if (page === 'settings') loadSettingsPage();
+  }
+
+  /* ================= Toast ================= */
+  function showToast(message, type) {
+    type = type || 'info';
+    const container = document.getElementById('toast-container');
+    const el = document.createElement('div');
+    el.className = 'toast ' + type;
+    el.textContent = message;
+    container.appendChild(el);
+    setTimeout(() => {
+      el.style.opacity = '0';
+      el.style.transform = 'translateX(100%)';
+      setTimeout(() => el.remove(), 250);
+    }, 3500);
+  }
+
+  /* ================= Modal ================= */
+  function openModal(id) { document.getElementById(id).classList.add('active'); }
+  function closeModal(id) { document.getElementById(id).classList.remove('active'); }
+  document.querySelectorAll('.modal-overlay').forEach(overlay => {
+    overlay.addEventListener('click', function(e) {
+      if (e.target === overlay) closeModal(overlay.id);
+    });
+  });
+  document.addEventListener('keydown', function(e) {
+    if (e.key === 'Escape') {
+      const active = document.querySelector('.modal-overlay.active');
+      if (active) closeModal(active.id);
+    }
+  });
+
+  let confirmCallback = null;
+  function openConfirmModal(title, message, okText, callback) {
+    document.getElementById('confirm-modal-title').textContent = title;
+    document.getElementById('confirm-modal-message').textContent = message;
+    document.getElementById('confirm-modal-ok').textContent = okText || 'ยืนยัน';
+    confirmCallback = callback;
+    openModal('confirm-modal');
+  }
+  document.getElementById('confirm-modal-ok').addEventListener('click', () => {
+    closeModal('confirm-modal');
+    if (confirmCallback) {
+      const cb = confirmCallback;
+      confirmCallback = null;
+      cb();
+    }
+  });
+
+  /* ================= Initialization ================= */
+  async function init() {
+    document.getElementById('current-date-label').textContent = formatBE(todayStorage());
+    document.getElementById('finance-filter-date').value = todayInputDate();
+
+    // 1) โหลด cache ก่อน เพื่อแสดงผลทันที (ยังไม่ดึง server)
+    loadCachedState();
+    populateCategorySelects();
+    navigateTo('dashboard', true);
+    renderDashboard();
+
+    // 2) ดึงข้อมูลจริงใน background แล้วอัปเดต
+    try {
+      const initial = await gsRun('getInitialData');
+      state.categories = initial.categories || [];
+      state.financeCategories = initial.financeCategories || [];
+      state.lineGroups = initial.lineGroups || [];
+      state.settings = initial.settings || {};
+      state.tasks = initial.tasks || [];
+      state.financeRecords = initial.financeRecords || state.financeRecords;
+      state.financeSummary = initial.financeSummary || state.financeSummary;
+      state.todayFinanceRecords = initial.todayFinanceRecords || state.todayFinanceRecords;
+      state.dataLoaded = true;
+      saveStateToCache();
+      populateCategorySelects();
+      populateNotifyTargetSelects();
+      renderCurrentView();
+
+      const urlParams = new URLSearchParams(window.location.search);
+      const editFinanceId = urlParams.get('editFinanceId');
+      if (editFinanceId) {
+        setTimeout(() => openFinanceModalWithId(editFinanceId), 500);
+      }
+
+      const viewParam = SERVER_VIEW || urlParams.get('view');
+      if (viewParam && ['dashboard','tasks','finance','settings','calendar'].indexOf(viewParam) >= 0) {
+        setTimeout(() => navigateTo(viewParam), 500);
+      }
+    } catch (e) {
+      console.error(e);
+      showToast('โหลดข้อมูลเริ่มต้นไม่สำเร็จ: ' + e.message, 'error');
+    }
+  }
+
+  function renderCurrentView() {
+    if (state.currentPage === 'dashboard') renderDashboard();
+    if (state.currentPage === 'tasks') renderTasksFromState();
+    if (state.currentPage === 'finance') {
+      if (state.financeLoaded) renderFinanceFromState();
+      else loadFinance();
+    }
+  }
+
+  // ลบ debug code และแก้ null-return bug
+  async function loadCategories() {
+    state.categories = await gsRun('getCategories') || [];
+    if (state.categories.length === 0) {
+      try { await gsRun('addCategory', 'Work', '#006664'); } catch (e) {}
+      try { await gsRun('addCategory', 'Personal', '#10B981'); } catch (e) {}
+      try { await gsRun('addCategory', 'Urgent', '#DC2626'); } catch (e) {}
+      try { await gsRun('addCategory', 'Shopping', '#F59E0B'); } catch (e) {}
+      state.categories = await gsRun('getCategories') || [];
+    }
+  }
+
+  async function loadFinanceCategories() {
+    state.financeCategories = await gsRun('getFinanceCategories') || [];
+    if (state.financeCategories.length === 0) {
+      const defaults = [
+        ['ค่าอาหาร','รายจ่าย','','#F59E0B'],
+        ['ค่าเดินทาง','รายจ่าย','','#0D9488'],
+        ['ค่าไฟฟ้า','รายจ่าย','','#EF4444'],
+        ['ช้อปปิ้ง','รายจ่าย','','#8B5CF6'],
+        ['เงินเดือน','รายรับ','','#10B981'],
+        ['อื่นๆ','รายจ่าย','','#94A3B8']
+      ];
+      for (const d of defaults) {
+        try { await gsRun('addFinanceCategory', d[0], d[1], d[2], d[3]); } catch (e) { /* ignore */ }
+      }
+      state.financeCategories = await gsRun('getFinanceCategories') || [];
+    }
+  }
+
+  async function loadSettings(showToastMsg) {
+    state.settings = await gsRun('getSettings') || {};
+    if (showToastMsg !== false) updateSettingsUI();
+  }
+
+  function populateCategorySelects() {
+    const selects = ['task-category','task-filter-category','finance-category','finance-filter-category'];
+    selects.forEach(id => {
+      const sel = document.getElementById(id);
+      if (!sel) return;
+      const isTask = id.startsWith('task');
+      const list = isTask ? state.categories : state.financeCategories;
+      const old = sel.value;
+      sel.innerHTML = '';
+      if (id === 'task-filter-category' || id === 'finance-filter-category') {
+        const opt = document.createElement('option');
+        opt.value = ''; opt.textContent = 'ทุกหมวดหมู่';
+        sel.appendChild(opt);
+      }
+      list.forEach(c => {
+        const opt = document.createElement('option');
+        opt.value = c.name;
+        opt.textContent = (isTask ? '' : (c.icon ? c.icon + ' ' : '')) + c.name;
+        sel.appendChild(opt);
+      });
+      const valid = Array.from(sel.options).some(o => o.value === old);
+      sel.value = valid ? old : (list[0]?.name || '');
+    });
+  }
+
+  function populateNotifyTargetSelects() {
+    const container = document.getElementById('task-notify-groups');
+    const select = document.getElementById('task-notify-target');
+    if (!container || !select) return;
+    container.innerHTML = '';
+    if (state.lineGroups && state.lineGroups.length > 0) {
+      state.lineGroups.forEach(g => {
+        const label = document.createElement('label');
+        label.className = 'group-checkbox';
+        label.innerHTML = '<input type="checkbox" value="' + escapeHtml(g.group_id) + '"> ' + escapeHtml(g.name || 'กลุ่ม LINE');
+        container.appendChild(label);
+      });
+    }
+    function onChange() {
+      container.style.display = select.value === '__select__' ? 'block' : 'none';
+    }
+    select.removeEventListener('change', onChange);
+    select.addEventListener('change', onChange);
+    onChange();
+  }
+
+  function getSelectedNotifyGroupIds() {
+    const select = document.getElementById('task-notify-target');
+    if (!select) return { notify_group: false, notify_group_ids: '' };
+    const value = select.value;
+    if (value === 'false') return { notify_group: false, notify_group_ids: '' };
+    if (value === '__all__') return { notify_group: true, notify_group_ids: '__all__' };
+    const container = document.getElementById('task-notify-groups');
+    const checked = container ? Array.from(container.querySelectorAll('input:checked')).map(cb => cb.value) : [];
+    if (checked.length === 0) return { notify_group: false, notify_group_ids: '' };
+    return { notify_group: true, notify_group_ids: checked.join(',') };
+  }
+
+  function setNotifyTargetFromTask(task) {
+    const select = document.getElementById('task-notify-target');
+    const container = document.getElementById('task-notify-groups');
+    if (!select || !container) return;
+    if (!task || !task.notify_group) {
+      select.value = 'false';
+    } else {
+      const ids = String(task.notify_group_ids || '').trim();
+      if (ids === '__all__' || !ids) {
+        select.value = '__all__';
+      } else {
+        select.value = '__select__';
+        const selectedIds = ids.split(',').map(s => s.trim()).filter(Boolean);
+        container.querySelectorAll('input[type="checkbox"]').forEach(cb => {
+          cb.checked = selectedIds.indexOf(cb.value) >= 0;
+        });
+      }
+    }
+    container.style.display = select.value === '__select__' ? 'block' : 'none';
+  }
+
+  function updateSettingsUI() {
+    document.getElementById('line-token').value = state.settings.LINE_CHANNEL_ACCESS_TOKEN || '';
+    document.getElementById('line-user-id').value = state.settings.LINE_DEFAULT_USER_ID || '';
+    document.getElementById('web-app-url').value = state.settings.WEB_APP_URL || '';
+    document.getElementById('default-reminder').value = state.settings.DEFAULT_REMIND_MINUTES || '15';
+    document.getElementById('timezone-display').value = state.settings.TIMEZONE || 'Asia/Bangkok';
+    const richMenuDisplay = document.getElementById('rich-menu-id-display');
+    if (richMenuDisplay) richMenuDisplay.value = state.settings.RICH_MENU_ID || '';
+    renderLineGroupList();
+    updateTriggerStatusUI();
+  }
+
+  async function updateTriggerStatusUI() {
+    try {
+      const status = await gsRun('getTriggerStatus');
+      const pill = document.getElementById('trigger-status');
+      if (status.active) {
+        pill.className = 'status-pill active';
+        pill.textContent = 'กำลังทำงาน';
+      } else {
+        pill.className = 'status-pill inactive';
+        pill.textContent = 'ปิดอยู่';
+      }
+    } catch (e) { /* ignore */ }
+  }
+
+  /* ================= Dashboard ================= */
+  // โหลด parallel แทน serial — เร็วขึ้น ~3x
+async function loadDashboard() {
+  try {
+    const today = todayStorage();
+    const [summary, records] = await Promise.all([
+      gsRun('getFinanceSummary', 'daily', today),
+      gsRun('getFinanceRecords', { date: today })
+    ]);
+    state.financeSummary = summary;
+    state.todayFinanceRecords = records || [];
+    renderDashboard();
+  } catch (e) {
+    showToast('โหลดแดชบอร์ดไม่สำเร็จ: ' + e.message, 'error');
+  }
+}
+
+function renderDashboard() {
+  const today = todayStorage();
+  const selectedDate = state.selectedDate || today;
+  const year = state.calendarDate.getFullYear();
+  const month = state.calendarDate.getMonth();
+  const stats = getTaskStatsFromState(selectedDate);
+  const dayFinance = computeFinanceSummary(getFinanceByDateFromState(selectedDate));
+  document.getElementById('dash-total-today').textContent = stats.total;
+  document.getElementById('dash-pending').textContent = stats.pending;
+  document.getElementById('dash-completed').textContent = stats.done;
+  document.getElementById('dash-balance').textContent = formatMoney(dayFinance.balance || 0);
+  document.getElementById('dash-selected-date').textContent = formatThaiLongDateBE(selectedDate);
+  document.getElementById('dash-top-pending').textContent = stats.pending;
+  document.getElementById('dash-top-done').textContent = stats.done;
+  document.getElementById('today-card-date').textContent = formatBE(selectedDate);
+  renderTodayTasks(getTasksByDateFromState(selectedDate));
+  renderTodayFinance(getFinanceByDateFromState(selectedDate));
+  renderCalendar(getTasksForMonthFromState(year, month));
+}
+
+  function renderTodayTasks(tasks) {
+    const ul = document.getElementById('today-task-list');
+    ul.innerHTML = '';
+    if (!tasks.length) {
+      ul.innerHTML = `
+        <li class="empty-state-card">
+          <div class="empty-state-icon">◇</div>
+          <div class="empty-state-title">ไม่มีงานที่บันทึกไว้</div>
+          <div class="empty-state-sub">วันที่เลือกนี้ว่างอยู่ คุณสามารถเพลิดเพลินกับวันหยุดหรือเพิ่มภารกิจใหม่ได้ทันที</div>
+        </li>`;
+      return;
+    }
+    tasks.forEach(t => {
+      const done = t.status === 'Done';
+      const borderColor = priorityColor(t.priority);
+      const li = document.createElement('li');
+      li.style.borderLeft = `4px solid ${borderColor}`;
+      li.innerHTML = `
+        <div class="task-row" tabindex="0" role="button" aria-label="แก้ไข ${escapeHtml(t.task_name)}" onclick="openTaskModalWithTaskById('${t.task_id}')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();openTaskModalWithTaskById('${t.task_id}');}">
+          <input type="checkbox" ${done ? 'checked' : ''}
+            onclick="event.stopPropagation(); toggleTodayTaskStatus('${t.task_id}', this.checked)">
+          <div class="task-content">
+            <div class="task-title ${done ? 'done' : ''}">${escapeHtml(t.task_name)}</div>
+            <div class="task-meta">
+              <span>เวลา ${t.due_time || '-'}</span>
+              <span class="category-badge" style="${categoryBadgeStyle(t.category)}">${escapeHtml(t.category || 'ทั่วไป')}</span>
+            </div>
+          </div>
+        </div>`;
+      ul.appendChild(li);
+    });
+  }
+
+  function renderTodayFinance(records) {
+    const ul = document.getElementById('today-finance-list');
+    ul.innerHTML = '';
+    records = [...records].sort((a, b) => String(b.created_at || '').localeCompare(a.created_at || ''));
+    if (!records.length) {
+      ul.innerHTML = `
+        <li class="empty-state-card">
+          <div class="empty-state-icon">◇</div>
+          <div class="empty-state-title">ไม่มีรายการ</div>
+          <div class="empty-state-sub">บันทึกรายรับ-รายจ่ายของวันนี้</div>
+        </li>`;
+      return;
+    }
+    records.forEach(r => {
+      const isIncome = r.type === 'รายรับ';
+      const borderColor = isIncome ? '#10B981' : '#EF4444';
+      const amountColor = isIncome ? '#10B981' : '#EF4444';
+      const cat = financeCategory(r.category);
+      const li = document.createElement('li');
+      li.style.borderLeft = `4px solid ${borderColor}`;
+      li.setAttribute('onclick', `openTodayFinanceById('${r.transaction_id}')`);
+      li.innerHTML = `
+        <div class="finance-row">
+          <div class="finance-icon">${cat.icon}</div>
+          <div class="finance-content">
+            <div class="finance-title">${escapeHtml(r.title)}</div>
+            <div class="finance-amount" style="color:${amountColor}">${isIncome ? '+' : '-'}${formatMoney(r.amount)}</div>
+          </div>
+        </div>`;
+      ul.appendChild(li);
+    });
+  }
+
+  function openFinanceModalForToday() {
+    openFinanceModal(null);
+  }
+
+  function openTodayFinanceById(id) {
+    const rec = (state.financeRecords || []).find(r => r.transaction_id === id);
+    if (rec) openFinanceModal(rec);
+    else showToast('ไม่พบข้อมูลรายการ', 'error');
+  }
+
+  async function toggleTodayTaskStatus(id, checked) {
+    const status = checked ? 'Done' : 'Pending';
+    await toggleTaskStatus(id, status);
+  }
+
+  async function refreshFinance() {
+    try {
+      if (state.currentPage === 'finance') {
+        if (state.financeLoaded) renderFinanceFromState();
+        else loadFinance();
+      }
+      if (state.currentPage === 'dashboard') loadDashboard();
+    } catch (e) {
+      console.error('refreshFinance:', e);
+    }
+  }
+
+  function populateCalendarHeader() {
+    const monthSelect = document.getElementById('calendar-month-select');
+    const yearSelect = document.getElementById('calendar-year-select');
+    if (!monthSelect || !yearSelect) return;
+
+    if (!monthSelect.options.length) {
+      THAI_MONTHS.forEach((m, i) => {
+        const opt = document.createElement('option');
+        opt.value = String(i);
+        opt.textContent = m;
+        monthSelect.appendChild(opt);
+      });
+    }
+
+    const currentYear = new Date().getFullYear();
+    yearSelect.innerHTML = '';
+    for (let y = currentYear - 5; y <= currentYear + 5; y++) {
+      const opt = document.createElement('option');
+      opt.value = String(y);
+      opt.textContent = String(y + 543);
+      yearSelect.appendChild(opt);
+    }
+
+    monthSelect.value = String(state.calendarDate.getMonth());
+    yearSelect.value = String(state.calendarDate.getFullYear());
+  }
+
+  function setToday() {
+    state.calendarDate = new Date();
+    state.selectedDate = todayStorage();
+    renderDashboard();
+  }
+
+  function handleMonthChange() {
+    const monthSelect = document.getElementById('calendar-month-select');
+    const yearSelect = document.getElementById('calendar-year-select');
+    if (!monthSelect || !yearSelect) return;
+    state.calendarDate = new Date(Number(yearSelect.value), Number(monthSelect.value), 1);
+    populateCalendarHeader();
+    renderCalendar(getTasksForMonthFromState(state.calendarDate.getFullYear(), state.calendarDate.getMonth()));
+  }
+
+  function changeMonth(delta) {
+    state.calendarDate.setMonth(state.calendarDate.getMonth() + delta);
+    populateCalendarHeader();
+    renderCalendar(getTasksForMonthFromState(state.calendarDate.getFullYear(), state.calendarDate.getMonth()));
+  }
+
+  async function renderCalendar(tasks) {
+    const year = state.calendarDate.getFullYear();
+    const month = state.calendarDate.getMonth();
+    populateCalendarHeader();
+
+    const grid = document.getElementById('calendar-grid');
+    grid.innerHTML = '';
+
+    THAI_DAYS.forEach((d, i) => {
+      const h = document.createElement('div');
+      h.className = 'calendar-day-header';
+      if (i === 0) h.classList.add('sunday');
+      if (i === 6) h.classList.add('saturday');
+      h.textContent = d;
+      grid.appendChild(h);
+    });
+
+    const todayStr = todayStorage();
+    const selectedDate = state.selectedDate || todayStr;
+    const taskMap = {};
+    (tasks || []).forEach(t => {
+      if (!t.task_date) return;
+      if (!taskMap[t.task_date]) taskMap[t.task_date] = [];
+      taskMap[t.task_date].push(t);
+    });
+
+    const financeMap = {};
+    (state.financeRecords || []).forEach(r => {
+      if (!r.date || r.type !== 'รายจ่าย') return;
+      if (!financeMap[r.date]) financeMap[r.date] = [];
+      financeMap[r.date].push(r);
+    });
+
+    const firstDay = new Date(year, month, 1).getDay();
+    const daysInMonth = new Date(year, month + 1, 0).getDate();
+    const prevMonthDays = new Date(year, month, 0).getDate();
+    const totalCells = 42;
+
+    for (let i = firstDay - 1; i >= 0; i--) {
+      const dayNum = prevMonthDays - i;
+      const dateStr = toStorageDate(new Date(year, month - 1, dayNum));
+      grid.appendChild(createDayCell(dayNum, dateStr, false));
+    }
+
+    for (let d = 1; d <= daysInMonth; d++) {
+      const dateStr = `${year}-${pad(month + 1)}-${pad(d)}`;
+      const cell = createDayCell(d, dateStr, true);
+      if (dateStr === todayStr) cell.classList.add('today');
+      if (dateStr === selectedDate) cell.classList.add('selected');
+      grid.appendChild(cell);
+    }
+
+    const filled = firstDay + daysInMonth;
+    const remaining = totalCells - filled;
+    for (let i = 1; i <= remaining; i++) {
+      const dateStr = toStorageDate(new Date(year, month + 1, i));
+      grid.appendChild(createDayCell(i, dateStr, false));
+    }
+
+    function createDayCell(dayNum, dateStr, isCurrentMonth) {
+      const cell = document.createElement('div');
+      cell.className = 'calendar-day' + (isCurrentMonth ? '' : ' other-month');
+      cell.setAttribute('tabindex', '0');
+      cell.setAttribute('role', 'button');
+      cell.setAttribute('aria-label', `วันที่ ${dayNum} ${formatThaiLongDate(dateStr)}`);
+      cell.innerHTML = `<div class="calendar-day-number">${dayNum}</div>`;
+
+      const dayTasks = taskMap[dateStr] || [];
+      const taskContainer = document.createElement('div');
+      taskContainer.className = 'calendar-day-tasks';
+
+      const maxBadges = window.innerWidth < 640 ? 1 : 2;
+      dayTasks.slice(0, maxBadges).forEach(t => {
+        const badge = document.createElement('div');
+        badge.className = 'calendar-task-badge';
+        badge.style.cssText = categoryBadgeStyle(t.category);
+        badge.textContent = t.task_name || 'งาน';
+        if (t.status === 'Done') {
+          badge.style.textDecoration = 'line-through';
+          badge.style.opacity = '0.5';
+        }
+        taskContainer.appendChild(badge);
+      });
+
+      if (dayTasks.length > maxBadges) {
+        const more = document.createElement('div');
+        more.className = 'calendar-more';
+        more.textContent = `+ อีก ${dayTasks.length - maxBadges} งาน`;
+        taskContainer.appendChild(more);
+      }
+
+      cell.appendChild(taskContainer);
+
+      const dayFinances = financeMap[dateStr] || [];
+      if (dayFinances.length > 0) {
+        const indicator = document.createElement('div');
+        indicator.className = 'finance-indicator';
+        indicator.innerHTML = `฿ ${dayFinances.length}`;
+        cell.appendChild(indicator);
+      }
+
+      function activate() {
+        state.selectedDate = dateStr;
+        renderDashboard();
+        openDayModal(dateStr);
+      }
+      cell.addEventListener('click', activate);
+      cell.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          activate();
+        }
+      });
+
+      return cell;
+    }
+  }
+
+  function openDayModal(dateStr) {
+    document.getElementById('day-modal-title').textContent = 'ภารกิจประจำวัน';
+    document.getElementById('day-modal-subtitle').textContent = formatThaiLongDate(dateStr);
+    const body = document.getElementById('day-modal-body');
+    openModal('day-modal');
+    const tasks = getTasksByDateFromState(dateStr);
+    if (!tasks.length) {
+      body.innerHTML = `
+        <div class="empty-state-card">
+          <div class="empty-state-icon">◇</div>
+          <div class="empty-state-title">ไม่มีงานในวันนี้</div>
+          <div class="empty-state-sub">เพิ่มภารกิจเพื่อเริ่มต้นวันนี้</div>
+          <button type="button" class="btn btn-primary mt" onclick="openTaskModal(null, state.selectedDate)">+ เพิ่มงาน</button>
+        </div>`;
+      return;
+    }
+    body.innerHTML = '';
+    tasks.forEach(t => {
+      const card = document.createElement('div');
+      card.className = 'day-task-card' + (t.status === 'Done' ? ' done' : '');
+
+      const checkbox = document.createElement('input');
+      checkbox.type = 'checkbox';
+      checkbox.className = 'day-task-check';
+      checkbox.checked = t.status === 'Done';
+      checkbox.onchange = () => toggleTaskStatus(t.task_id, checkbox.checked ? 'Done' : 'Pending');
+
+      const content = document.createElement('div');
+      content.className = 'day-task-content';
+
+      const title = document.createElement('div');
+      title.className = 'day-task-title';
+      title.textContent = t.task_name || 'งานไม่มีชื่อ';
+
+      const meta = document.createElement('div');
+      meta.className = 'day-task-meta';
+      meta.innerHTML = `
+        <span class="day-task-badge priority-${(t.priority || 'Medium').toLowerCase()}">${priorityLabel(t.priority)}</span>
+        <span class="day-task-badge category">${escapeHtml(t.category || '-')}</span>
+        <span class="day-task-time">${t.due_time || '-'}</span>
+      `;
+
+      content.append(title, meta);
+      card.append(checkbox, content);
+      body.appendChild(card);
+    });
+  }
+
+  async function renderDailySheet() {
+    try {
+      const res = await gsRun('renderDailyInfoSheet', todayStorage());
+      showToast('อัปเดต Sheet ข้อมูลรายวันเรียบร้อย (' + res.count + ' งาน)', 'success');
+    } catch (e) {
+      showToast('อัปเดต Sheet ไม่สำเร็จ: ' + e.message, 'error');
+    }
+  }
+
+  /* ================= Tasks ================= */
+  async function loadTasks() {
+    try {
+      state.tasks = await gsRun('getAllTasks') || [];
+      state.dataLoaded = true;
+      saveStateToCache();
+      renderTasksFromState();
+    } catch (e) {
+      showToast('โหลดงานไม่สำเร็จ: ' + e.message, 'error');
+    }
+  }
+
+  function buildTaskFilters() {
+    const date = document.getElementById('task-filter-date').value;
+    return {
+      date: date || '',
+      status: document.getElementById('task-filter-status').value,
+      priority: document.getElementById('task-filter-priority').value,
+      category: document.getElementById('task-filter-category').value,
+      search: document.getElementById('task-search').value.trim(),
+      sortBy: 'date'
+    };
+  }
+
+  function applyClientTaskFilters(filters) {
+    filters = filters || buildTaskFilters();
+    let filtered = state.tasks.filter(t => {
+      if (filters.date && t.task_date !== filters.date) return false;
+      if (filters.status && t.status !== filters.status) return false;
+      if (filters.priority && t.priority !== filters.priority) return false;
+      if (filters.category && t.category !== filters.category) return false;
+      if (filters.search) {
+        const text = String(t.task_name + ' ' + (t.note || '')).toLowerCase();
+        if (text.indexOf(filters.search.toLowerCase()) === -1) return false;
+      }
+      return true;
+    });
+    filtered.sort((a, b) => (a.task_date + (a.due_time || '')).localeCompare(b.task_date + (b.due_time || '')));
+    renderTasksTable(filtered);
+  }
+
+  function renderTasksFromState() {
+    applyClientTaskFilters();
+  }
+
+  function applyTaskFilters() { applyClientTaskFilters(); }
+  function resetTaskFilters() {
+    document.getElementById('task-filter-date').value = '';
+    document.getElementById('task-filter-status').value = '';
+    document.getElementById('task-filter-priority').value = '';
+    document.getElementById('task-filter-category').value = '';
+    document.getElementById('task-search').value = '';
+    applyClientTaskFilters();
+  }
+
+  function renderTasksTable(tasks) {
+    const tbody = document.getElementById('tasks-table-body');
+    tbody.innerHTML = '';
+    if (!tasks.length) {
+      tbody.innerHTML = `
+        <tr><td colspan="8" class="empty-state">
+          <div class="empty-state-title" style="margin-top:12px;">ไม่พบงาน</div>
+          <div class="empty-state-sub">ลองปรับตัวกรองหรือเพิ่มภารกิจใหม่</div>
+          <button type="button" class="btn btn-primary mt" onclick="openTaskModal()">+ เพิ่มงาน</button>
+        </td></tr>`;
+      return;
+    }
+    tasks.forEach(t => {
+      const tr = document.createElement('tr');
+      tr.innerHTML = `
+        <td><strong>${escapeHtml(t.task_name)}</strong></td>
+        <td>${formatBE(t.task_date)}</td>
+        <td>${t.due_time || '-'}</td>
+        <td><span class="badge ${priorityClass(t.priority)}">${priorityLabel(t.priority)}</span></td>
+        <td><span class="category-dot" style="background:${categoryColor(t.category)}"></span>${escapeHtml(t.category || '-')}</td>
+        <td><span class="badge ${statusClass(t.status)}">${statusLabel(t.status)}</span></td>
+        <td>${t.remind_before_m || 0} นาที</td>
+        <td class="actions">
+          <button class="btn btn-sm btn-outline btn-icon" onclick="openTaskModalWithTaskById('${t.task_id}')">แก้ไข</button>
+          <button class="btn btn-sm btn-icon btn-delete" onclick="deleteTask('${t.task_id}')">ลบ</button>
+        </td>
+      `;
+      tbody.appendChild(tr);
+    });
+  }
+
+  function setPriority(value) {
+    document.getElementById('task-priority').value = value;
+    document.querySelectorAll('.priority-btn').forEach(btn => {
+      btn.classList.toggle('active', btn.dataset.value === value);
+    });
+  }
+
+  function toggleReminderSelect() {
+    const checkbox = document.getElementById('task-line-reminder');
+    const select = document.getElementById('task-reminder');
+    const targetSelect = document.getElementById('task-notify-target');
+    const groupContainer = document.getElementById('task-notify-groups');
+    select.disabled = !checkbox.checked;
+    if (targetSelect) targetSelect.disabled = !checkbox.checked;
+    if (groupContainer) {
+      groupContainer.querySelectorAll('input[type="checkbox"]').forEach(cb => cb.disabled = !checkbox.checked);
+      if (!checkbox.checked) groupContainer.style.display = 'none';
+      else if (targetSelect && targetSelect.value === '__select__') groupContainer.style.display = 'block';
+    }
+    updateReminderOptions();
+  }
+
+  const ALL_DAY_REMINDER_OPTIONS = [
+    { value: 0, label: 'ตรงเวลา (08:00)' },
+    { value: 1440, label: 'ก่อนหนึ่งวัน (08:00)' },
+    { value: 2880, label: 'ก่อน 2 วัน (08:00)' },
+    { value: 10080, label: 'ก่อน 1 สัปดาห์' }
+  ];
+
+  const TIMED_REMINDER_OPTIONS = [
+    { value: 0, label: 'ตรงเวลา' },
+    { value: 5, label: 'ก่อน 5 นาที' },
+    { value: 15, label: 'ก่อน 15 นาที' },
+    { value: 30, label: 'ก่อน 30 นาที' },
+    { value: 60, label: 'ก่อน 1 ชั่วโมง' },
+    { value: 120, label: 'ก่อน 2 ชั่วโมง' },
+    { value: 1440, label: 'ก่อน 1 วัน' },
+    { value: 2880, label: 'ก่อน 2 วัน' },
+    { value: 10080, label: 'ก่อน 1 สัปดาห์' }
+  ];
+
+  function toggleAllDay() {
+    const isAllDay = document.getElementById('task-all-day').checked;
+    const startTime = document.getElementById('task-start-time');
+    const endTime = document.getElementById('task-end-time');
+    startTime.disabled = isAllDay;
+    endTime.disabled = isAllDay;
+    if (isAllDay) {
+      startTime.value = '08:00';
+      endTime.value = '';
+    }
+    updateReminderOptions();
+  }
+
+  function updateReminderOptions() {
+    const isAllDay = document.getElementById('task-all-day').checked;
+    const dateInput = document.getElementById('task-date').value;
+    const timeInput = document.getElementById('task-start-time').value;
+    const select = document.getElementById('task-reminder');
+    const lineEnabled = document.getElementById('task-line-reminder').checked;
+    const currentValue = select.value;
+
+    const options = isAllDay ? ALL_DAY_REMINDER_OPTIONS : TIMED_REMINDER_OPTIONS;
+    let taskDateTime = null;
+    if (dateInput) {
+      const baseTime = isAllDay ? '08:00' : (timeInput || '08:00');
+      taskDateTime = new Date(dateInput + 'T' + baseTime);
+    }
+    const now = new Date();
+
+    select.innerHTML = '';
+    options.forEach(opt => {
+      let enabled = true;
+      if (taskDateTime && !isNaN(taskDateTime.getTime())) {
+        const reminderTime = new Date(taskDateTime.getTime() - opt.value * 60000);
+        if (reminderTime < now) enabled = false;
+      }
+      const option = document.createElement('option');
+      option.value = String(opt.value);
+      option.textContent = opt.label;
+      option.disabled = !enabled;
+      select.appendChild(option);
+    });
+
+    if (currentValue) {
+      const match = Array.from(select.options).find(o => o.value === currentValue && !o.disabled);
+      if (match) select.value = currentValue;
+    }
+    select.disabled = !lineEnabled;
+  }
+
+  function openTaskModal(task, dateStr) {
+    document.getElementById('task-form').reset();
+    document.getElementById('task-id').value = '';
+    document.getElementById('task-status').value = 'Pending';
+    document.getElementById('task-line-reminder').checked = false;
+    populateNotifyTargetSelects();
+    const notifyTarget = document.getElementById('task-notify-target');
+    if (notifyTarget) notifyTarget.value = 'false';
+    document.getElementById('task-all-day').checked = false;
+    toggleReminderSelect();
+    document.getElementById('task-modal-title').textContent = 'สร้างงานใหม่';
+    populateCategorySelects();
+
+    if (task && task.task_id) {
+      document.getElementById('task-modal-title').textContent = 'แก้ไขงาน';
+      document.getElementById('task-id').value = task.task_id;
+      document.getElementById('task-title').value = task.task_name || '';
+      document.getElementById('task-description').value = task.note || '';
+      document.getElementById('task-date').value = task.task_date || todayInputDate();
+      document.getElementById('task-category').value = task.category || state.categories[0]?.name || '';
+      document.getElementById('task-start-time').value = task.due_time || '';
+      document.getElementById('task-end-time').value = task.end_time || '';
+      document.getElementById('task-status').value = task.status || 'Pending';
+      setPriority(task.priority || 'Medium');
+      const isAllDay = !!task.is_all_day;
+      document.getElementById('task-all-day').checked = isAllDay;
+      toggleAllDay();
+      const reminderMin = Number(task.remind_before_m || 0);
+      document.getElementById('task-line-reminder').checked = reminderMin > 0;
+      updateReminderOptions();
+      document.getElementById('task-reminder').value = String(reminderMin > 0 ? reminderMin : '');
+      setNotifyTargetFromTask(task);
+      toggleReminderSelect();
+    } else {
+      document.getElementById('task-date').value = dateStr || todayInputDate();
+      document.getElementById('task-category').value = state.categories[0]?.name || '';
+      setPriority('Medium');
+      toggleAllDay();
+      updateReminderOptions();
+    }
+    openModal('task-modal');
+  }
+
+  function openTaskModalWithTaskById(id) {
+    const task = state.tasks.find(t => t.task_id === id);
+    if (task) openTaskModal(task);
+    else showToast('ไม่พบข้อมูลงาน', 'error');
+  }
+
+  async function submitTaskForm() {
+    const id = document.getElementById('task-id').value;
+    const lineEnabled = document.getElementById('task-line-reminder').checked;
+    const notifyTargetInfo = getSelectedNotifyGroupIds();
+    const isAllDay = document.getElementById('task-all-day').checked;
+    const existingTask = id ? state.tasks.find(t => t.task_id === id) : null;
+    const data = {
+      task_name: document.getElementById('task-title').value.trim(),
+      note: document.getElementById('task-description').value.trim(),
+      task_date: document.getElementById('task-date').value,
+      due_time: isAllDay ? '08:00' : document.getElementById('task-start-time').value,
+      priority: document.getElementById('task-priority').value,
+      category: document.getElementById('task-category').value,
+      status: document.getElementById('task-status').value,
+      remind_before_m: lineEnabled ? parseInt(document.getElementById('task-reminder').value || '0', 10) : 0,
+      notify_group: lineEnabled ? notifyTargetInfo.notify_group : (existingTask && existingTask.notify_group ? existingTask.notify_group : false),
+      notify_group_ids: lineEnabled ? notifyTargetInfo.notify_group_ids : (existingTask && existingTask.notify_group_ids ? existingTask.notify_group_ids : ''),
+      is_all_day: isAllDay,
+      end_time: isAllDay ? '' : document.getElementById('task-end-time').value
+    };
+    try {
+      let task;
+      if (id) {
+        task = await gsRun('updateTask', id, data);
+        const idx = state.tasks.findIndex(t => t.task_id === id);
+        if (idx >= 0) state.tasks[idx] = task;
+        else state.tasks.push(task);
+        showToast('แก้ไขงานเรียบร้อย', 'success');
+      } else {
+        task = await gsRun('addTask', data);
+        state.tasks.push(task);
+        showToast('เพิ่มงานเรียบร้อย', 'success');
+      }
+      closeModal('task-modal');
+      saveStateToCache();
+      renderCurrentView();
+    } catch (e) {
+      showToast('บันทึกงานไม่สำเร็จ: ' + e.message, 'error');
+    }
+  }
+
+  async function toggleTaskStatus(id, status) {
+    const task = state.tasks.find(t => t.task_id === id);
+    if (!task) return;
+    const previousStatus = task.status;
+    task.status = status;
+    saveStateToCache();
+    renderCurrentView();
+    showToast('อัปเดตสถานะเรียบร้อย', 'success');
+
+    try {
+      const updated = await gsRun('updateTaskStatus', id, status);
+      Object.assign(task, updated);
+      saveStateToCache();
+      renderCurrentView();
+    } catch (e) {
+      task.status = previousStatus;
+      saveStateToCache();
+      renderCurrentView();
+      showToast('อัปเดตสถานะไม่สำเร็จ: ' + e.message, 'error');
+    }
+  }
+
+  function deleteTask(id) {
+    openConfirmModal(
+      'ยืนยันการลบงาน',
+      'ต้องการลบงานนี้ใช่หรือไม่?',
+      'ลบ',
+      () => doDeleteTask(id)
+    );
+  }
+
+  async function doDeleteTask(id) {
+    const previousTasks = state.tasks.slice();
+    state.tasks = state.tasks.filter(t => t.task_id !== id);
+    saveStateToCache();
+    if (state.currentPage !== 'tasks') closeModal('day-modal');
+    renderCurrentView();
+    try {
+      await gsRun('deleteTask', id);
+      showToast('ลบงานเรียบร้อย', 'success');
+    } catch (e) {
+      state.tasks = previousTasks;
+      saveStateToCache();
+      renderCurrentView();
+      showToast('ลบงานไม่สำเร็จ: ' + e.message, 'error');
+    }
+  }
+
+  /* ================= Finance ================= */
+  async function loadFinance() {
+    try {
+      state.financeRecords = await gsRun('getFinanceRecords', {}) || [];
+      state.financeLoaded = true;
+      saveStateToCache();
+      renderFinanceFromState();
+    } catch (e) {
+      showToast('โหลดข้อมูลการเงินไม่สำเร็จ: ' + e.message, 'error');
+    }
+  }
+
+  function buildFinanceFilters() {
+    return {
+      period: document.getElementById('finance-period').value,
+      periodDate: document.getElementById('finance-filter-date').value,
+      type: document.getElementById('finance-filter-type').value,
+      category: document.getElementById('finance-filter-category').value,
+      scope: document.getElementById('finance-filter-scope').value
+    };
+  }
+
+  function parseClientDate(str) {
+    const parts = String(str).split('-');
+    if (parts.length !== 3) return null;
+    return new Date(parseInt(parts[0], 10), parseInt(parts[1], 10) - 1, parseInt(parts[2], 10));
+  }
+
+  function inPeriod(recordDate, period, periodDateStr) {
+    const rp = parseClientDate(recordDate);
+    if (!rp) return false;
+    const dp = parseClientDate(periodDateStr);
+    if (!dp) return false;
+    if (period === 'daily') {
+      return rp.getFullYear() === dp.getFullYear() && rp.getMonth() === dp.getMonth() && rp.getDate() === dp.getDate();
+    }
+    if (period === 'monthly') {
+      return rp.getFullYear() === dp.getFullYear() && rp.getMonth() === dp.getMonth();
+    }
+    if (period === 'yearly') {
+      return rp.getFullYear() === dp.getFullYear();
+    }
+    return true;
+  }
+
+  function computeFinanceSummary(records) {
+    let income = 0, expense = 0;
+    (records || []).forEach(r => {
+      if (r.type === 'รายรับ') income += r.amount || 0;
+      else expense += r.amount || 0;
+    });
+    return { income, expense, balance: income - expense };
+  }
+
+  function computeExpenseByCategory(records) {
+    const map = {};
+    (records || []).forEach(r => {
+      if (r.type !== 'รายจ่าย') return;
+      const cat = r.category || 'ไม่ระบุหมวดหมู่';
+      map[cat] = (map[cat] || 0) + (r.amount || 0);
+    });
+    const result = Object.keys(map).map(cat => ({ category: cat, amount: map[cat] }));
+    result.sort((a, b) => b.amount - a.amount);
+    return result;
+  }
+
+  function renderFinanceFromState() {
+    const filters = buildFinanceFilters();
+    const periodRecords = state.financeRecords.filter(r => inPeriod(r.date, filters.period, filters.periodDate));
+    const tableRecords = periodRecords.filter(r => {
+      if (filters.type && r.type !== filters.type) return false;
+      if (filters.category && r.category !== filters.category) return false;
+      if (filters.scope && r.scope !== filters.scope) return false;
+      return true;
+    });
+    renderFinanceTable(tableRecords);
+
+    const summary = computeFinanceSummary(periodRecords);
+    document.getElementById('fin-total-income').textContent = formatMoney(summary.income);
+    document.getElementById('fin-total-expense').textContent = formatMoney(summary.expense);
+    document.getElementById('fin-balance').textContent = formatMoney(summary.balance);
+
+    const byCat = computeExpenseByCategory(periodRecords);
+    renderExpenseChart(byCat);
+  }
+
+  function applyFinanceFilters() { renderFinanceFromState(); }
+
+  async function exportFinanceReport() {
+    const format = document.getElementById('finance-export-format').value;
+    const filters = buildFinanceFilters();
+    const btn = document.querySelector('.export-group .btn');
+    const originalText = btn.textContent;
+    btn.textContent = 'กำลังสร้างไฟล์...';
+    btn.disabled = true;
+    try {
+      const result = await gsRun('exportFinanceReport', filters, format);
+      if (!result || !result.success) throw new Error('สร้างไฟล์ไม่สำเร็จ');
+      const byteCharacters = atob(result.content);
+      const byteNumbers = new Array(byteCharacters.length);
+      for (let i = 0; i < byteCharacters.length; i++) {
+        byteNumbers[i] = byteCharacters.charCodeAt(i);
+      }
+      const byteArray = new Uint8Array(byteNumbers);
+      const blob = new Blob([byteArray], { type: result.mimeType });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = result.filename;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+      showToast('ดาวน์โหลดรายงานเรียบร้อย', 'success');
+    } catch (e) {
+      showToast('ดาวน์โหลดไม่สำเร็จ: ' + e.message, 'error');
+    } finally {
+      btn.textContent = originalText;
+      btn.disabled = false;
+    }
+  }
+
+  function resetFinanceFilters() {
+    document.getElementById('finance-period').value = 'monthly';
+    document.getElementById('finance-filter-date').value = todayInputDate();
+    document.getElementById('finance-filter-type').value = '';
+    document.getElementById('finance-filter-category').value = '';
+    document.getElementById('finance-filter-scope').value = '';
+    renderFinanceFromState();
+  }
+
+  function renderFinanceTable(records) {
+    const tbody = document.getElementById('finance-table-body');
+    tbody.innerHTML = '';
+    if (!records.length) {
+      tbody.innerHTML = `
+        <tr><td colspan="7" class="empty-state">
+          <div class="empty-state-title" style="margin-top:12px;">ไม่พบรายการ</div>
+          <div class="empty-state-sub">ลองปรับตัวกรองหรือเพิ่มรายการใหม่</div>
+          <button type="button" class="btn btn-primary mt" onclick="openFinanceModal()">+ เพิ่มรายการ</button>
+        </td></tr>`;
+      return;
+    }
+    records.forEach(r => {
+      const cat = financeCategory(r.category);
+      const tr = document.createElement('tr');
+      tr.innerHTML = `
+        <td>${formatBE(r.date)}</td>
+        <td><span class="badge ${r.type === 'รายรับ' ? 'badge-low' : 'badge-high'}">${r.type}</span></td>
+        <td>${escapeHtml(r.title)}</td>
+        <td><span style="color:${cat.color}">${cat.icon}</span> ${escapeHtml(r.category || '-')}</td>
+        <td>${escapeHtml(r.scope || 'ส่วนตัว')}</td>
+        <td style="font-weight:600; color:${r.type==='รายรับ'?'#059669':'#DC2626'}">${formatMoney(r.amount)}</td>
+        <td class="actions">
+          <button class="btn btn-sm btn-outline btn-icon" onclick="openFinanceModalWithId('${r.transaction_id}')">แก้ไข</button>
+          <button class="btn btn-sm btn-icon btn-delete" onclick="deleteFinanceRecord('${r.transaction_id}')">ลบ</button>
+        </td>
+      `;
+      tbody.appendChild(tr);
+    });
+  }
+
+  function renderExpenseChart(data) {
+    const ctx = document.getElementById('expense-chart').getContext('2d');
+    if (state.charts.expense) state.charts.expense.destroy();
+    if (!data.length) {
+      state.charts.expense = new Chart(ctx, {
+        type: 'doughnut',
+        data: { labels: ['ไม่มีข้อมูล'], datasets: [{ data: [1], backgroundColor: ['#E2E8F0'] }] },
+        options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'bottom' } } }
+      });
+      return;
+    }
+    state.charts.expense = new Chart(ctx, {
+      type: 'doughnut',
+      data: {
+        labels: data.map(d => d.category),
+        datasets: [{
+          data: data.map(d => d.amount),
+          backgroundColor: data.map(d => financeCategory(d.category).color),
+          borderWidth: 2,
+          borderColor: '#fff'
+        }]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+          legend: { position: 'bottom' },
+          tooltip: {
+            callbacks: { label: function(c) { return ' ' + formatMoney(c.raw); } }
+          }
+        }
+      }
+    });
+  }
+
+  function debounce(fn, ms) {
+    let t;
+    return function(...args) {
+      clearTimeout(t);
+      t = setTimeout(() => fn(...args), ms);
+    };
+  }
+
+  window.addEventListener('resize', debounce(() => {
+    if (state.currentPage === 'finance' && state.charts.expense) {
+      state.charts.expense.resize();
+    }
+  }, 200));
+
+  function openFinanceModal(record, dateStr) {
+    document.getElementById('finance-form').reset();
+    document.getElementById('finance-id').value = '';
+    document.getElementById('finance-modal-title').textContent = 'เพิ่มรายรับ-รายจ่าย';
+    populateCategorySelects();
+    document.getElementById('finance-date').value = (record && record.date) || dateStr || todayInputDate();
+    document.getElementById('finance-category').value = state.financeCategories[0]?.name || '';
+    document.getElementById('finance-scope').value = 'ส่วนตัว';
+    if (record && record.transaction_id) {
+      document.getElementById('finance-modal-title').textContent = 'แก้ไขรายรับ-รายจ่าย';
+      document.getElementById('finance-id').value = record.transaction_id;
+      document.getElementById('finance-type').value = record.type || 'รายจ่าย';
+      document.getElementById('finance-amount').value = record.amount || '';
+      document.getElementById('finance-title').value = record.title || '';
+      document.getElementById('finance-category').value = record.category || state.financeCategories[0]?.name || '';
+      document.getElementById('finance-scope').value = record.scope || 'ส่วนตัว';
+      document.getElementById('finance-date').value = record.date;
+      document.getElementById('finance-note').value = record.note || '';
+    }
+    openModal('finance-modal');
+  }
+
+  function openFinanceModalWithId(id) {
+    const rec = state.financeRecords.find(r => r.transaction_id === id);
+    if (rec) openFinanceModal(rec);
+    else showToast('ไม่พบข้อมูลรายการ', 'error');
+  }
+
+  function recomputeTodayFinanceSummary() {
+    let income = 0, expense = 0;
+    (state.todayFinanceRecords || []).forEach(r => {
+      if (r.type === 'รายรับ') income += r.amount;
+      else expense += r.amount;
+    });
+    state.financeSummary = { income, expense, balance: income - expense };
+  }
+
+  function upsertFinanceRecordInState(record) {
+    const allIdx = state.financeRecords.findIndex(r => r.transaction_id === record.transaction_id);
+    if (allIdx >= 0) state.financeRecords[allIdx] = record;
+    else state.financeRecords.push(record);
+
+    if (record.date === todayStorage()) {
+      const todayIdx = state.todayFinanceRecords.findIndex(r => r.transaction_id === record.transaction_id);
+      if (todayIdx >= 0) state.todayFinanceRecords[todayIdx] = record;
+      else state.todayFinanceRecords.push(record);
+    } else {
+      state.todayFinanceRecords = state.todayFinanceRecords.filter(r => r.transaction_id !== record.transaction_id);
+    }
+    recomputeTodayFinanceSummary();
+  }
+
+  function removeFinanceRecordFromState(id) {
+    state.financeRecords = state.financeRecords.filter(r => r.transaction_id !== id);
+    state.todayFinanceRecords = state.todayFinanceRecords.filter(r => r.transaction_id !== id);
+    recomputeTodayFinanceSummary();
+  }
+
+  async function submitFinanceForm() {
+    const id = document.getElementById('finance-id').value;
+    const data = {
+      type: document.getElementById('finance-type').value,
+      amount: parseFloat(document.getElementById('finance-amount').value),
+      title: document.getElementById('finance-title').value.trim(),
+      category: document.getElementById('finance-category').value,
+      scope: document.getElementById('finance-scope').value || 'ส่วนตัว',
+      date: document.getElementById('finance-date').value,
+      note: document.getElementById('finance-note').value.trim()
+    };
+    try {
+      let record;
+      if (id) {
+        record = await gsRun('updateFinanceRecord', id, data);
+        showToast('แก้ไขรายการเรียบร้อย', 'success');
+      } else {
+        record = await gsRun('addFinanceRecord', data);
+        showToast('เพิ่มรายการเรียบร้อย', 'success');
+      }
+      upsertFinanceRecordInState(record);
+      saveStateToCache();
+      closeModal('finance-modal');
+      renderCurrentView();
+    } catch (e) {
+      showToast('บันทึกรายการไม่สำเร็จ: ' + e.message, 'error');
+    }
+  }
+
+  function deleteFinanceRecord(id) {
+    openConfirmModal(
+      'ยืนยันการลบรายการ',
+      'ต้องการลบรายการนี้ใช่หรือไม่?',
+      'ลบ',
+      () => doDeleteFinanceRecord(id)
+    );
+  }
+
+  async function doDeleteFinanceRecord(id) {
+    removeFinanceRecordFromState(id);
+    saveStateToCache();
+    renderCurrentView();
+    try {
+      await gsRun('deleteFinanceRecord', id);
+      showToast('ลบรายการเรียบร้อย', 'success');
+    } catch (e) {
+      showToast('ลบรายการไม่สำเร็จ: ' + e.message, 'error');
+      refreshFinance();
+    }
+  }
+
+  /* ================= Settings ================= */
+  let currentSetupStep = 1;
+  const TOTAL_SETUP_STEPS = 5;
+
+  function goToSetupStep(step) {
+    if (step < 1 || step > TOTAL_SETUP_STEPS) return;
+    currentSetupStep = step;
+    document.querySelectorAll('#settings-stepper .stepper-item').forEach(item => {
+      const itemStep = parseInt(item.dataset.step, 10);
+      item.classList.toggle('active', itemStep === step);
+    });
+    document.querySelectorAll('#settings-steps .setup-step').forEach(s => {
+      const itemStep = parseInt(s.dataset.step, 10);
+      s.classList.toggle('active', itemStep === step);
+    });
+  }
+
+  function nextSetupStep() {
+    goToSetupStep(currentSetupStep + 1);
+  }
+
+  function prevSetupStep() {
+    goToSetupStep(currentSetupStep - 1);
+  }
+
+  async function loadSettingsPage() {
+    goToSetupStep(1);
+    updateSettingsUI();
+    renderCategoryList();
+    renderFinanceCategoryList();
+    try {
+      const [cats, finCats, groups] = await Promise.all([
+        gsRun('getCategories'),
+        gsRun('getFinanceCategories'),
+        gsRun('getLineGroups')
+      ]);
+      state.categories = cats || [];
+      state.financeCategories = finCats || [];
+      state.lineGroups = groups || [];
+      saveStateToCache();
+      updateSettingsUI();
+      renderCategoryList();
+      renderFinanceCategoryList();
+      populateCategorySelects();
+      populateNotifyTargetSelects();
+    } catch (e) {
+      console.error('loadSettingsPage refresh failed:', e);
+    }
+  }
+
+  function renderCategoryList() {
+    const ul = document.getElementById('category-list');
+    ul.innerHTML = '';
+    if (!state.categories.length) {
+      ul.innerHTML = '<li class="empty-state">ยังไม่มีหมวดหมู่<br><small style="color:var(--text-secondary)">เพิ่มหมวดหมู่ด้านล่าง</small></li>';
+      return;
+    }
+    state.categories.forEach(c => {
+      const li = document.createElement('li');
+      li.innerHTML = `
+        <div class="left"><span class="category-dot" style="background:${c.color}"></span>${escapeHtml(c.name)}</div>
+        <div class="actions">
+          <button class="btn btn-sm btn-outline edit-cat">แก้ไข</button>
+          <button class="btn btn-sm btn-delete del-cat" title="ลบ">ลบ</button>
+        </div>
+      `;
+      const btns = li.querySelectorAll('button');
+      btns[0].dataset.name = c.name;
+      btns[1].dataset.name = c.name;
+      ul.appendChild(li);
+    });
+    ul.querySelectorAll('.edit-cat').forEach(btn => {
+      btn.addEventListener('click', () => openCategoryEditModal(btn.dataset.name));
+    });
+    ul.querySelectorAll('.del-cat').forEach(btn => {
+      btn.addEventListener('click', () => openDeleteCategoryConfirm(btn.dataset.name));
+    });
+  }
+
+  function renderFinanceCategoryList() {
+    const ul = document.getElementById('finance-category-list');
+    ul.innerHTML = '';
+    if (!state.financeCategories.length) {
+      ul.innerHTML = '<li class="empty-state">ยังไม่มีหมวดหมู่<br><small style="color:var(--text-secondary)">เพิ่มหมวดหมู่ด้านล่าง</small></li>';
+      return;
+    }
+    state.financeCategories.forEach(c => {
+      const li = document.createElement('li');
+      li.innerHTML = `
+        <div class="left"><span style="color:${c.color}; font-size:18px">${c.icon}</span> [${c.type}] ${escapeHtml(c.name)}</div>
+        <div class="actions">
+          <button class="btn btn-sm btn-outline edit-fin">แก้ไข</button>
+          <button class="btn btn-sm btn-delete del-fin" title="ลบ">ลบ</button>
+        </div>
+      `;
+      const btns = li.querySelectorAll('button');
+      btns[0].dataset.name = c.name;
+      btns[1].dataset.name = c.name;
+      ul.appendChild(li);
+    });
+    ul.querySelectorAll('.edit-fin').forEach(btn => {
+      btn.addEventListener('click', () => openFinanceCategoryEditModal(btn.dataset.name));
+    });
+    ul.querySelectorAll('.del-fin').forEach(btn => {
+      btn.addEventListener('click', () => openDeleteFinanceCategoryConfirm(btn.dataset.name));
+    });
+  }
+
+  async function addCategory() {
+    const name = document.getElementById('new-category-name').value.trim();
+    const color = document.getElementById('new-category-color').value;
+    if (!name) return;
+    const newCat = { name, color };
+    state.categories.push(newCat);
+    saveStateToCache();
+    document.getElementById('new-category-name').value = '';
+    renderCategoryList();
+    populateCategorySelects();
+    try {
+      await gsRun('addCategory', name, color);
+      showToast('เพิ่มหมวดหมู่เรียบร้อย', 'success');
+    } catch (e) {
+      state.categories = state.categories.filter(c => c !== newCat);
+      saveStateToCache();
+      renderCategoryList();
+      populateCategorySelects();
+      showToast('เพิ่มหมวดหมู่ไม่สำเร็จ: ' + e.message, 'error');
+    }
+  }
+
+  function openCategoryEditModal(name) {
+    const cat = state.categories.find(c => c.name === name);
+    if (!cat) return;
+    document.getElementById('category-edit-old-name').value = name;
+    document.getElementById('category-edit-name').value = name;
+    document.getElementById('category-edit-color').value = cat.color || '#006664';
+    openModal('category-edit-modal');
+  }
+
+  async function submitCategoryEdit() {
+    const oldName = document.getElementById('category-edit-old-name').value;
+    const newName = document.getElementById('category-edit-name').value.trim();
+    const color = document.getElementById('category-edit-color').value;
+    if (!oldName || !newName) return;
+    closeModal('category-edit-modal');
+
+    const idx = state.categories.findIndex(c => c.name === oldName);
+    if (idx < 0) return;
+    const oldCat = { ...state.categories[idx] };
+    state.categories[idx] = { name: newName, color: color || oldCat.color };
+    const affectedTasks = state.tasks.filter(t => t.category === oldName);
+    affectedTasks.forEach(t => { t.category = newName; });
+    saveStateToCache();
+    renderCategoryList();
+    populateCategorySelects();
+    renderCurrentView();
+    try {
+      await gsRun('updateCategory', oldName, newName, color || oldCat.color);
+      showToast('แก้ไขหมวดหมู่เรียบร้อย', 'success');
+    } catch (e) {
+      state.categories[idx] = oldCat;
+      affectedTasks.forEach(t => { t.category = oldName; });
+      saveStateToCache();
+      renderCategoryList();
+      populateCategorySelects();
+      renderCurrentView();
+      showToast('แก้ไขหมวดหมู่ไม่สำเร็จ: ' + e.message, 'error');
+    }
+  }
+
+  function openDeleteCategoryConfirm(name) {
+    openConfirmModal(
+      'ยืนยันการลบหมวดหมู่',
+      `ต้องการลบหมวดหมู่ "${name}" ใช่หรือไม่?`,
+      'ลบ',
+      () => doDeleteCategory(name)
+    );
+  }
+
+  async function doDeleteCategory(name) {
+    const previous = state.categories.slice();
+    state.categories = state.categories.filter(c => c.name !== name);
+    saveStateToCache();
+    renderCategoryList();
+    populateCategorySelects();
+    try {
+      await gsRun('deleteCategory', name);
+      showToast('ลบหมวดหมู่เรียบร้อย', 'success');
+    } catch (e) {
+      state.categories = previous;
+      saveStateToCache();
+      renderCategoryList();
+      populateCategorySelects();
+      showToast('ลบหมวดหมู่ไม่สำเร็จ: ' + e.message, 'error');
+    }
+  }
+
+  async function addFinanceCategory() {
+    const name = document.getElementById('new-finance-name').value.trim();
+    const type = document.getElementById('new-finance-type').value;
+    const icon = document.getElementById('new-finance-icon').value.trim() || '';
+    const color = document.getElementById('new-finance-color').value;
+    if (!name) return;
+    const newCat = { name, type, icon, color };
+    state.financeCategories.push(newCat);
+    saveStateToCache();
+    document.getElementById('new-finance-name').value = '';
+    document.getElementById('new-finance-icon').value = '';
+    renderFinanceCategoryList();
+    populateCategorySelects();
+    try {
+      await gsRun('addFinanceCategory', name, type, icon, color);
+      showToast('เพิ่มหมวดหมู่การเงินเรียบร้อย', 'success');
+    } catch (e) {
+      state.financeCategories = state.financeCategories.filter(c => c !== newCat);
+      saveStateToCache();
+      renderFinanceCategoryList();
+      populateCategorySelects();
+      showToast('เพิ่มหมวดหมู่ไม่สำเร็จ: ' + e.message, 'error');
+    }
+  }
+
+  function openFinanceCategoryEditModal(oldName) {
+    const c = financeCategory(oldName);
+    document.getElementById('finance-category-edit-old-name').value = oldName;
+    document.getElementById('finance-category-edit-name').value = oldName;
+    document.getElementById('finance-category-edit-type').value = c.type || 'รายจ่าย';
+    document.getElementById('finance-category-edit-icon').value = c.icon || '';
+    document.getElementById('finance-category-edit-color').value = c.color || '#94A3B8';
+    openModal('finance-category-edit-modal');
+  }
+
+  async function submitFinanceCategoryEdit() {
+    const oldName = document.getElementById('finance-category-edit-old-name').value;
+    const newName = document.getElementById('finance-category-edit-name').value.trim();
+    const type = document.getElementById('finance-category-edit-type').value;
+    const icon = document.getElementById('finance-category-edit-icon').value.trim();
+    const color = document.getElementById('finance-category-edit-color').value;
+    if (!oldName || !newName || !icon) return;
+    closeModal('finance-category-edit-modal');
+
+    const idx = state.financeCategories.findIndex(fc => fc.name === oldName);
+    if (idx < 0) return;
+    const oldCat = { ...state.financeCategories[idx] };
+    state.financeCategories[idx] = {
+      name: newName,
+      type: type || oldCat.type,
+      icon: icon || oldCat.icon,
+      color: color || oldCat.color
+    };
+    const updateCatName = (r) => { if (r.category === oldName) r.category = newName; };
+    state.financeRecords.forEach(updateCatName);
+    state.todayFinanceRecords.forEach(updateCatName);
+    saveStateToCache();
+    renderFinanceCategoryList();
+    populateCategorySelects();
+    renderCurrentView();
+    try {
+      await gsRun('updateFinanceCategory', oldName, newName, type || oldCat.type, icon || oldCat.icon, color || oldCat.color);
+      showToast('แก้ไขหมวดหมู่การเงินเรียบร้อย', 'success');
+    } catch (e) {
+      state.financeCategories[idx] = oldCat;
+      state.financeRecords.forEach(r => { if (r.category === newName) r.category = oldName; });
+      state.todayFinanceRecords.forEach(r => { if (r.category === newName) r.category = oldName; });
+      saveStateToCache();
+      renderFinanceCategoryList();
+      populateCategorySelects();
+      renderCurrentView();
+      showToast('แก้ไขหมวดหมู่การเงินไม่สำเร็จ: ' + e.message, 'error');
+    }
+  }
+
+  function openDeleteFinanceCategoryConfirm(name) {
+    openConfirmModal(
+      'ยืนยันการลบหมวดหมู่การเงิน',
+      `ต้องการลบหมวดหมู่การเงิน "${name}" ใช่หรือไม่?`,
+      'ลบ',
+      () => doDeleteFinanceCategory(name)
+    );
+  }
+
+  async function doDeleteFinanceCategory(name) {
+    const previous = state.financeCategories.slice();
+    state.financeCategories = state.financeCategories.filter(c => c.name !== name);
+    saveStateToCache();
+    renderFinanceCategoryList();
+    populateCategorySelects();
+    try {
+      await gsRun('deleteFinanceCategory', name);
+      showToast('ลบหมวดหมู่การเงินเรียบร้อย', 'success');
+    } catch (e) {
+      state.financeCategories = previous;
+      saveStateToCache();
+      renderFinanceCategoryList();
+      populateCategorySelects();
+      showToast('ลบหมวดหมู่ไม่สำเร็จ: ' + e.message, 'error');
+    }
+  }
+
+  async function saveLineSetup() {
+    const token = document.getElementById('line-token').value.trim();
+    const userId = document.getElementById('line-user-id').value.trim();
+    const webAppUrl = document.getElementById('web-app-url').value.trim();
+    const reminder = document.getElementById('default-reminder').value;
+    try {
+      await gsRun('saveLineSetup', token, userId);
+      await gsRun('saveSetting', 'WEB_APP_URL', webAppUrl);
+      await gsRun('saveSetting', 'DEFAULT_REMIND_MINUTES', reminder);
+      showToast('บันทึกการตั้งค่า LINE เรียบร้อย', 'success');
+      await loadSettings();
+    } catch (e) {
+      showToast('บันทึกการตั้งค่าไม่สำเร็จ: ' + e.message, 'error');
+    }
+  }
+
+  async function fetchLatestUserId() {
+    try {
+      const uid = await gsRun('getLatestUserId');
+      if (uid) {
+        document.getElementById('line-user-id').value = uid;
+        showToast('ดึง User ID ล่าสุดเรียบร้อย', 'success');
+      } else {
+        showToast('ยังไม่มี User ID ล่าสุด กรุณาส่งข้อความหา Bot ก่อน', 'warning');
+      }
+    } catch (e) {
+      showToast('ดึง User ID ไม่สำเร็จ: ' + e.message, 'error');
+    }
+  }
+
+  async function fetchLatestGroupId() {
+    try {
+      const gid = await gsRun('getLatestGroupId');
+      if (gid) {
+        await doAddLineGroup(gid, '');
+        showToast('ดึง Group ID ล่าสุดและเพิ่มกลุ่มเรียบร้อย', 'success');
+      } else {
+        showToast('ยังไม่มี Group ID ล่าสุด กรุณาเพิ่ม Bot เข้ากลุ่มหรือพิมพ์ในกลุ่มก่อน', 'warning');
+      }
+    } catch (e) {
+      showToast('ดึง Group ID ไม่สำเร็จ: ' + e.message, 'error');
+    }
+  }
+
+  function renderLineGroupList() {
+    const list = document.getElementById('line-group-list');
+    if (!list) return;
+    list.innerHTML = '';
+    if (!state.lineGroups || state.lineGroups.length === 0) {
+      list.innerHTML = '<li class="empty-state">ยังไม่มีกลุ่ม LINE<br><small style="color:var(--text-secondary)">เพิ่มกลุ่มด้านล่างหรือดึงจาก Webhook</small></li>';
+      return;
+    }
+    state.lineGroups.forEach(g => {
+      const li = document.createElement('li');
+      li.className = 'settings-list-item';
+      li.innerHTML = '<div><strong>' + escapeHtml(g.name || 'กลุ่ม LINE') + '</strong><br><small class="text-secondary">' + escapeHtml(g.group_id) + '</small></div>' +
+        '<button type="button" class="btn btn-danger btn-sm" onclick="deleteLineGroup(\'' + g.group_id.replace(/'/g, "\\\\'") + '\')">ลบ</button>';
+      list.appendChild(li);
+    });
+  }
+
+  async function addLineGroup() {
+    const idInput = document.getElementById('new-line-group-id');
+    const nameInput = document.getElementById('new-line-group-name');
+    const id = (idInput.value || '').trim();
+    const name = (nameInput.value || '').trim();
+    if (!id) return;
+    await doAddLineGroup(id, name);
+    idInput.value = '';
+    nameInput.value = '';
+  }
+
+  async function doAddLineGroup(groupId, name) {
+    if (state.lineGroups.some(g => g.group_id === groupId)) {
+      showToast('กลุ่มนี้มีในระบบแล้ว', 'warning');
+      return;
+    }
+    const previous = state.lineGroups.slice();
+    state.lineGroups = state.lineGroups.concat([{ group_id: groupId, name: name || 'กลุ่ม LINE' }]);
+    saveStateToCache();
+    renderLineGroupList();
+    populateNotifyTargetSelects();
+    try {
+      const added = await gsRun('addLineGroup', groupId, name);
+      const idx = state.lineGroups.findIndex(g => g.group_id === groupId);
+      if (idx >= 0) state.lineGroups[idx] = { group_id: added.group_id, name: added.name };
+      saveStateToCache();
+      renderLineGroupList();
+      populateNotifyTargetSelects();
+      showToast('เพิ่มกลุ่ม LINE เรียบร้อย', 'success');
+    } catch (e) {
+      state.lineGroups = previous;
+      saveStateToCache();
+      renderLineGroupList();
+      populateNotifyTargetSelects();
+      showToast('เพิ่มกลุ่มไม่สำเร็จ: ' + e.message, 'error');
+      throw e;
+    }
+  }
+
+  async function deleteLineGroup(groupId) {
+    const previous = state.lineGroups.slice();
+    state.lineGroups = state.lineGroups.filter(g => g.group_id !== groupId);
+    saveStateToCache();
+    renderLineGroupList();
+    populateNotifyTargetSelects();
+    try {
+      await gsRun('deleteLineGroup', groupId);
+      showToast('ลบกลุ่ม LINE เรียบร้อย', 'success');
+    } catch (e) {
+      state.lineGroups = previous;
+      saveStateToCache();
+      renderLineGroupList();
+      populateNotifyTargetSelects();
+      showToast('ลบกลุ่มไม่สำเร็จ: ' + e.message, 'error');
+    }
+  }
+
+  async function testLineMessage() {
+    try {
+      const res = await gsRun('testLineMessage');
+      if (res.success) showToast('ส่งข้อความทดสอบสำเร็จ', 'success');
+      else showToast('ส่งข้อความไม่สำเร็จ: ' + res.error, 'error');
+    } catch (e) {
+      showToast('ทดสอบส่งข้อความไม่สำเร็จ: ' + e.message, 'error');
+    }
+  }
+
+  async function setupTrigger() {
+    try {
+      const res = await gsRun('setupReminderTrigger');
+      showToast(res.message, 'success');
+      updateTriggerStatusUI();
+    } catch (e) {
+      showToast('เปิด Trigger ไม่สำเร็จ: ' + e.message, 'error');
+    }
+  }
+
+  async function removeTrigger() {
+    try {
+      const res = await gsRun('removeTrigger');
+      showToast(res.message, 'success');
+      updateTriggerStatusUI();
+    } catch (e) {
+      showToast('ปิด Trigger ไม่สำเร็จ: ' + e.message, 'error');
+    }
+  }
+
+  async function runReminderCheckNow() {
+    try {
+      const res = await gsRun('runReminderCheckNow');
+      if (res.success) {
+        const info = document.getElementById('last-run-info');
+        if (info) {
+          info.textContent = `รันล่าสุด: ${res.runAt || '-'} | ส่งสำเร็จ: ${res.sent} | ผิดพลาด: ${res.errors}`;
+        }
+        showToast('ตรวจสอบ Reminder เสร็จแล้ว (ส่ง: ' + res.sent + ', ผิดพลาด: ' + res.errors + ')', 'success');
+      }
+    } catch (e) {
+      showToast('รันเช็ค Reminder ไม่สำเร็จ: ' + e.message, 'error');
+    }
+  }
+
+  async function runSystemSetup() {
+    try {
+      const res = await gsRun('runSetup');
+      showToast(res.message, 'success');
+      await loadSettings();
+    } catch (e) {
+      showToast('ตั้งค่าไม่สำเร็จ: ' + e.message, 'error');
+    }
+  }
+
+  async function createRichMenu() {
+    const fileId = document.getElementById('rich-menu-file-id').value.trim();
+    const warningEl = document.getElementById('rich-menu-warning');
+    if (warningEl) warningEl.textContent = '';
+    if (!fileId) {
+      showToast('กรุณาใส่ Google Drive File ID', 'warning');
+      return;
+    }
+    try {
+      const res = await gsRun('createAndUploadRichMenu', fileId);
+      if (res.success) {
+        document.getElementById('rich-menu-id-display').value = res.richMenuId || '';
+        if (res.warning && warningEl) {
+          warningEl.textContent = res.warning;
+          showToast('สร้าง Rich Menu สำเร็จ แต่ตั้งค่า default ไม่สำเร็จ', 'warning');
+        } else {
+          showToast('สร้าง Rich Menu สำเร็จ: ' + res.richMenuId, 'success');
+        }
+      } else {
+        showToast('สร้าง Rich Menu ไม่สำเร็จ', 'error');
+      }
+    } catch (e) {
+      showToast('สร้าง Rich Menu ไม่สำเร็จ: ' + e.message, 'error');
+    }
+  }
+
+  async function uploadRichMenuImage() {
+    const richMenuId = document.getElementById('rich-menu-id-display').value.trim();
+    const fileId = document.getElementById('rich-menu-file-id').value.trim();
+    if (!fileId) {
+      showToast('กรุณาใส่ Google Drive File ID', 'warning');
+      return;
+    }
+    try {
+      const res = await gsRun('uploadRichMenuImage', richMenuId || null, fileId);
+      if (res.success) {
+        const warningEl = document.getElementById('rich-menu-warning');
+        if (warningEl) warningEl.textContent = '';
+        showToast('อัปโหลดรูป Rich Menu สำเร็จ', 'success');
+      }
+    } catch (e) {
+      showToast('อัปโหลดรูปไม่สำเร็จ: ' + e.message, 'error');
+    }
+  }
+
+  async function retrySetDefaultRichMenu() {
+    const richMenuId = document.getElementById('rich-menu-id-display').value.trim();
+    if (!richMenuId) {
+      showToast('ยังไม่มี Rich Menu ID ให้ตั้งค่า', 'warning');
+      return;
+    }
+    try {
+      const res = await gsRun('setDefaultRichMenu', richMenuId);
+      if (res.success) {
+        const warningEl = document.getElementById('rich-menu-warning');
+        if (warningEl) warningEl.textContent = '';
+        showToast('ตั้งค่า Rich Menu default สำเร็จ', 'success');
+      }
+    } catch (e) {
+      showToast('ตั้งค่า default ไม่สำเร็จ: ' + e.message, 'error');
+    }
+  }
+
+  async function deleteRichMenus() {
+    openConfirmModal(
+      'ยืนยันการลบ Rich Menu',
+      'Rich Menu ทั้งหมดจะถูกลบออกจาก LINE Official Account ยืนยันหรือไม่?',
+      'ลบ Rich Menu',
+      async () => {
+        try {
+          const res = await gsRun('deleteAllRichMenus');
+          if (res.success) {
+            document.getElementById('rich-menu-id-display').value = '';
+            showToast('ลบ Rich Menu จำนวน ' + (res.deleted || 0) + ' รายการแล้ว', 'success');
+          }
+        } catch (e) {
+          showToast('ลบ Rich Menu ไม่สำเร็จ: ' + e.message, 'error');
+        }
+      }
+    );
+  }
+
+  function clearAllData() {
+    openConfirmModal(
+      'ยืนยันการล้างข้อมูลทั้งหมด',
+      'คุณแน่ใจหรือไม่ว่าต้องการล้างข้อมูลทั้งหมด? งาน รายรับ-รายจ่าย และหมวดหมู่ทั้งหมดจะถูกลบ การกระทำนี้ไม่สามารถย้อนกลับได้',
+      'ล้างข้อมูล',
+      () => doClearAllData()
+    );
+  }
+
+  async function doClearAllData() {
+    try {
+      await gsRun('clearAllData');
+      showToast('ล้างข้อมูลทั้งหมดเรียบร้อย', 'success');
+      await loadCategories();
+      await loadFinanceCategories();
+      populateCategorySelects();
+      navigateTo('dashboard');
+    } catch (e) {
+      showToast('ล้างข้อมูลไม่สำเร็จ: ' + e.message, 'error');
+    }
+  }
+
+  /* ================= Helpers ================= */
+  function escapeHtml(text) {
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+  }
+
+  document.addEventListener('DOMContentLoaded', init);
+</script>
