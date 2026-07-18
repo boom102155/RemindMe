@@ -6,20 +6,20 @@
 ### **📌 คู่มือติดตั้งระบบ Remind Me** 
 
 1. แนะนำระบบ
-Remind Me คือระบบจัดการภารกิจ รายรับ-รายจ่าย และการแจ้งเตือนผ่าน LINE Bot บน Google Sheets
-หลังจาก Make a copy แล้ว ให้ทำตามขั้นตอนด้านล่าง
+ - Remind Me คือระบบจัดการภารกิจ รายรับ-รายจ่าย และการแจ้งเตือนผ่าน LINE Bot บน Google Sheets
+ - หลังจาก Make a copy แล้ว ให้ทำตามขั้นตอนด้านล่าง
 
 2. ขั้นตอนหลัง Make a copy
-2.1 เปิด Google Sheet สำเนาที่คุณสร้างขึ้น
-2.2 รอสักครู่ให้เมนู Remind Me ปรากฏ (หรือรีเฟรชหน้า)
-2.3 คลิกเมนู Remind Me → ตั้งค่าเริ่มต้นระบบ
-2.4 คลิกเมนู Extensions → Apps Script
-2.5 ใน Apps Script คลิกปุ่ม Deploy (รูปจรวด) → New deployment
-2.6 เลือก Type: Web app
-2.7 ตั้งค่า:
-   - Description: Remind Me Web App
-   - Execute as: Me
-   - Who has access: Anyone
+ - เปิด Google Sheet สำเนาที่คุณสร้างขึ้น
+ - รอสักครู่ให้เมนู Remind Me ปรากฏ (หรือรีเฟรชหน้า)
+ - คลิกเมนู Remind Me → ตั้งค่าเริ่มต้นระบบ
+ - คลิกเมนู Extensions → Apps Script
+ - ใน Apps Script คลิกปุ่ม Deploy (รูปจรวด) → New deployment
+ - เลือก Type: Web app
+ - ตั้งค่า:
+    - Description: Remind Me Web App
+    - Execute as: Me
+    - Who has access: Anyone
 2.8 คลิก Deploy แล้วคัดลอก Web App URL
 2.9 เปิด Web App URL ในเบราว์เซอร์
 2.10 ไปที่หน้า ตั้งค่า แล้วใส่ Web App URL ในช่อง "ลิงก์ Dashboard"
