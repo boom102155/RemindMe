@@ -275,7 +275,9 @@ var TaskService = (function() {
       return tasks;
     },
 
-    addTask: function(data) {
+    addTask: function(data, options) {
+      options = options || {};
+      var skipNotify = options.skipNotify === true;
       if (!data.task_name) throw new Error('Task name is required');
       if (!data.task_date) throw new Error('Task date is required');
       var sheet = getSheet();
@@ -300,11 +302,13 @@ var TaskService = (function() {
       LogService.logEvent('TASK_CREATED', task.task_id, 'Created task', JSON.stringify({task_name: task.task_name, notify_group: task.notify_group, notify_group_ids: task.notify_group_ids}));
 
       // ส่ง Flex + ข้อความยืนยันให้ผู้ใช้หลักเมื่อสร้างภารกิจจากหน้าเว็บ
-      try {
-        var settings = SettingsService.getSettings();
-        LineService.sendTaskCreatedPush(null, task, settings.WEB_APP_URL || '');
-      } catch (notifyErr) {
-        LogService.logEvent('TASK_CREATE_NOTIFY_ERROR', task.task_id, notifyErr.message, '{}');
+      if (!skipNotify) {
+        try {
+          var settings = SettingsService.getSettings();
+          LineService.sendTaskCreatedPush(null, task, settings.WEB_APP_URL || '');
+        } catch (notifyErr) {
+          LogService.logEvent('TASK_CREATE_NOTIFY_ERROR', task.task_id, notifyErr.message, '{}');
+        }
       }
 
       return task;

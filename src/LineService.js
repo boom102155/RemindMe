@@ -1848,7 +1848,7 @@ var LineService = (function () {
         note: state.data.note || "",
         notify_group: state.data.notify_group === true,
         notify_group_ids: state.data.notify_group_ids || "",
-      });
+      }, { skipNotify: true });
       task.end_time = state.data.end_time || "";
       task.notify_group = state.data.notify_group === true;
       task.notify_group_ids = state.data.notify_group_ids || "";
