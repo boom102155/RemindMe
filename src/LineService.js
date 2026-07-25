@@ -2350,9 +2350,12 @@ var LineService = (function () {
       return this.pushMessage(userId, [flex]);
     },
 
-    sendLineReminder: function (userId, task, webAppUrl) {
+    sendLineReminder: function (userId, task, webAppUrl, options) {
+      options = options || {};
       var settings = SettingsService.getSettings();
       var dashboardUrl = webAppUrl || settings.WEB_APP_URL || DEFAULT_WEB_APP_URL;
+      var taskTitle = task.task_name || "ภารกิจ";
+      if (options.isEdited) taskTitle += " (แก้ไข)";
       var dateStr = task.task_date || "-";
       var timeStr = task.is_all_day ? "ทั้งวัน" : (task.due_time || "-");
       var remindText =
@@ -2436,7 +2439,7 @@ var LineService = (function () {
 
         return {
           type: "flex",
-          altText: "แจ้งเตือนงาน: " + task.task_name,
+          altText: "แจ้งเตือนงาน: " + taskTitle,
           contents: {
             type: "bubble",
             header: {
@@ -2447,18 +2450,11 @@ var LineService = (function () {
               contents: [
                 {
                   type: "text",
-                  text: "TO DO REMINDER",
-                  color: "#FFFFFF",
-                  size: "sm",
-                  weight: "bold",
-                },
-                {
-                  type: "text",
-                  text: "แผนงาน",
+                  text: taskTitle,
                   color: "#FFFFFF",
                   size: "xl",
                   weight: "bold",
-                  margin: "md",
+                  wrap: true,
                 },
               ],
             },
@@ -2468,18 +2464,9 @@ var LineService = (function () {
               spacing: "md",
               paddingAll: "20px",
               contents: [
-                {
-                  type: "text",
-                  text: task.task_name,
-                  weight: "bold",
-                  size: "lg",
-                  color: "#111827",
-                  wrap: true,
-                },
-                { type: "separator", margin: "md" },
-              infoRow("🗓️", "วันที่", dateStr),
-              infoRow("⏰", "เวลา", timeStr),
-              infoRow("⏳", "การเตือน", remindText),
+                infoRow("🗓️", "วันที่", dateStr),
+                infoRow("⏰", "เวลา", timeStr),
+                infoRow("⏳", "การเตือน", remindText),
                 infoRow("🏷️", "หมวดหมู่", categoryStr),
                 infoRow("⭐", "ความสำคัญ", priorityStr),
                 { type: "separator", margin: "md" },

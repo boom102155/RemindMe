@@ -337,11 +337,20 @@ var TaskService = (function() {
       sheet.getRange(row, 1, 1, headers.length).setValues([objectToRow(existing, headers)]);
       LogService.logEvent('TASK_UPDATED', id, 'Updated task', JSON.stringify(data));
 
-      // ส่งแจ้งเตือน Flex การแก้ไขไปยังเป้าหมายเดิม เฉพาะเมื่อ reminder_sent = true
-      if (existing.reminder_sent === true || String(existing.reminder_sent).toUpperCase() === 'TRUE') {
+      // การติ๊กสถานะเสร็จ/รอดำเนินการไม่ควรส่ง reminder ซ้ำ
+      var hasNonStatusChange = false;
+      for (var changedKey in data) {
+        if (data.hasOwnProperty(changedKey) && changedKey !== 'status' && EXPECTED_HEADERS.indexOf(changedKey) >= 0) {
+          hasNonStatusChange = true;
+          break;
+        }
+      }
+
+      // ส่งแจ้งเตือนการแก้ไขเฉพาะเมื่อมีการเปลี่ยนรายละเอียดงาน และเคยส่ง reminder แล้ว
+      if (hasNonStatusChange && (existing.reminder_sent === true || String(existing.reminder_sent).toUpperCase() === 'TRUE')) {
         try {
           var settings = SettingsService.getSettings();
-          LineService.sendLineReminder(null, existing, settings.WEB_APP_URL || '');
+          LineService.sendLineReminder(null, existing, settings.WEB_APP_URL || '', {isEdited: true});
           LogService.logEvent('TASK_UPDATE_NOTIFIED', id, 'Sent update notification', JSON.stringify({notify_group: existing.notify_group, notify_group_ids: existing.notify_group_ids}));
         } catch (notifyErr) {
           LogService.logEvent('TASK_UPDATE_NOTIFY_ERROR', id, notifyErr.message, '{}');
