@@ -489,7 +489,10 @@ var LineService = (function () {
     var afterAmount = t.slice(amountInfo.end);
     var currency = afterAmount.match(/^\s*(?:บาท|baht|THB|฿)/i);
     var removeEnd = amountInfo.end + (currency ? currency[0].length : 0);
-    var title = (t.slice(0, amountInfo.start) + t.slice(removeEnd))
+    // บางแอปถอดเสียง/สลิปใส่สัญลักษณ์สกุลเงินไว้ก่อนยอด เช่น ฿60
+    // จึงลบสัญลักษณ์ที่ติดอยู่หน้าตัวเลขออกจากชื่อรายการด้วย
+    var titleBeforeAmount = t.slice(0, amountInfo.start).replace(/(?:฿|THB)\s*$/i, "");
+    var title = (titleBeforeAmount + t.slice(removeEnd))
       .replace(/\s+/g, " ")
       .trim();
     if (!title) title = "ไม่ระบุรายการ";
@@ -728,10 +731,62 @@ var LineService = (function () {
     return { title: title, amount: amount, type: type, category: categoryName };
   }
 
+  /**
+   * แยกรายการที่พูดต่อกันโดยไม่มีจุลภาค เช่น
+   * "ค่ากาแฟห้าสิบบาท ค่ารถไฟฟ้าสี่สิบบาท ค่าอาหาร ฿60"
+   *
+   * ใช้ยอดเงินที่ตามด้วยหน่วยเงินเป็นขอบเขตหลัก ส่วนตัวเลขเปล่าจะใช้ได้
+   * เมื่ออยู่ท้ายข้อความ หรือรายการถัดไปขึ้นต้นด้วยคำที่พบได้บ่อย เพื่อไม่ให้
+   * แยกเลขอื่นในชื่อรายการ (เช่น "ซื้อ 2 ชิ้น 50 บาท") โดยผิดพลาด
+   */
+  function splitFinanceSegmentByAmount(text) {
+    var raw = String(text || "").trim();
+    if (!raw) return [];
+
+    var thaiNumberWord = "(?:ศูนย์|หนึ่ง|เอ็ด|สอง|ยี่|สาม|สี่|ห้า|หก|เจ็ด|แปด|เก้า|สิบ|ร้อย|พัน|หมื่น|แสน|ล้าน)";
+    var nextItemPrefix = "(?:ค่า|เงิน|ซื้อ|จ่าย|เติม|โอน|รับ|อาหาร|กาแฟ|รถ|น้ำ|บิล|โทรศัพท์|แท็กซี่|ช้อป|grab|taxi)";
+    var amountBoundary = new RegExp(
+      "(?:" +
+        "(?:(?:฿\\s*|THB\\s*)\\d+(?:,\\d{3})*(?:\\.\\d+)?|\\d+(?:,\\d{3})*(?:\\.\\d+)?\\s*(?:บาท|baht|THB|฿))" +
+        "|(?:" + thaiNumberWord + "\\s*)+\\s*บาท" +
+        "|\\d+(?:,\\d{3})*(?:\\.\\d+)?(?=\\s+(?=" + nextItemPrefix + ")|\\s*$)" +
+      ")",
+      "gi"
+    );
+
+    var boundaries = [];
+    var match;
+    while ((match = amountBoundary.exec(raw)) !== null) {
+      boundaries.push(match.index + match[0].length);
+    }
+
+    // มีขอบเขตเดียวก็ยังเป็นเพียงรายการเดียว ไม่ต้องเปลี่ยนข้อความเดิม
+    if (boundaries.length < 2) return [raw];
+
+    var segments = [];
+    var start = 0;
+    for (var i = 0; i < boundaries.length; i++) {
+      var segment = raw
+        .slice(start, boundaries[i])
+        .replace(/[\s,;]+$/, "")
+        .replace(/^(?:และ|กับ|แล้วก็)\s*/, "")
+        .trim();
+      if (segment) segments.push(segment);
+      start = boundaries[i];
+    }
+
+    // เก็บข้อความที่ตามหลังยอดสุดท้ายไว้กับรายการสุดท้าย แทนที่จะทิ้งไป
+    var trailingText = raw.slice(start).trim();
+    if (trailingText && segments.length > 0) {
+      segments[segments.length - 1] += " " + trailingText;
+    }
+    return segments.length > 0 ? segments : [raw];
+  }
+
   function parseFinanceItems(text, categories) {
     var raw = String(text || "").trim();
     if (!raw) return null;
-    var segments = raw
+    var delimitedSegments = raw
       .split(/,|\n/)
       .map(function (s) {
         return String(s).trim();
@@ -739,9 +794,13 @@ var LineService = (function () {
       .filter(function (s) {
         return s;
       });
+    var segments = [];
+    for (var i = 0; i < delimitedSegments.length; i++) {
+      segments = segments.concat(splitFinanceSegmentByAmount(delimitedSegments[i]));
+    }
     var records = [];
-    for (var i = 0; i < segments.length; i++) {
-      var rec = parseFinanceMessage(segments[i], categories);
+    for (var j = 0; j < segments.length; j++) {
+      var rec = parseFinanceMessage(segments[j], categories);
       if (rec) records.push(rec);
     }
     return records.length > 0 ? records : null;
