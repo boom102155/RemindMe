@@ -102,6 +102,7 @@ function onOpen() {
     .createMenu('Remind Me')
     .addItem('เปิด Dashboard', 'openDashboardDialog')
     .addItem('ตั้งค่าเริ่มต้นระบบ', 'runSetup')
+    .addItem('อัปเดตคู่มือ README', 'updateReadmeSheet')
     .addToUi();
 }
 
@@ -127,6 +128,12 @@ function runSetup() {
   SettingsService.saveSetting('TIMEZONE', 'Asia/Bangkok');
   SettingsService.saveSetting('DEFAULT_REMIND_MINUTES', '15');
   return {success: true, message: 'ตั้งค่าเริ่มต้นเสร็จสิ้น กรุณา Deploy Web App แล้วใส่ URL ในหน้า Settings'};
+}
+
+function updateReadmeSheet() {
+  initializeSheets();
+  seedReadmeSheet();
+  SpreadsheetApp.getUi().alert('อัปเดตคู่มือ README เรียบร้อยแล้ว');
 }
 
 function seedReadmeSheet() {
@@ -200,8 +207,19 @@ function seedReadmeSheet() {
     ['7.4 ใน Web App ไปที่หน้า ตั้งค่า → ส่วน LINE Rich Menu'],
     ['7.5 ใส่ File ID แล้วคลิก "สร้างและตั้งค่า Rich Menu"'],
     [''],
-    ['8. ข้อควรระวัง'],
+    ['8. วิธีจดรายรับ-รายจ่ายจากสลิปโอนเงิน'],
+    ['8.1 สร้าง Google Cloud project และเปิดใช้ Cloud Vision API พร้อมเชื่อมบัญชี Billing'],
+    ['8.2 สร้าง API key โดยจำกัดสิทธิ์ให้ใช้ได้กับ Cloud Vision API เท่านั้น'],
+    ['8.3 ใน Web App ไปที่หน้า ตั้งค่า → เชื่อมต่อ LINE แล้วใส่ Google Cloud Vision API key จากนั้นกดบันทึก'],
+    ['8.4 ส่งรูปสลิปโอนเงินให้ LINE Bot ในแชตส่วนตัว ระบบจะอ่านยอดเงิน วันที่ และคู่รายการจากสลิป'],
+    ['8.5 เลือกขอบเขตค่าใช้จ่ายผ่าน Quick Reply: ส่วนตัว หรือ ที่ทำงาน'],
+    ['8.6 ตรวจสอบ Flex Message แล้วกด บันทึก หรือ ยกเลิก'],
+    ['กติกาการบันทึก: สลิปโอนออกและสลิปที่ระบุทิศทางไม่ได้จะถูกตั้งเป็นรายจ่าย ส่วนสลิปเงินเข้า/รับเงินจะถูกตั้งเป็นรายรับ โดยค่าเริ่มต้น'],
+    ['ระบบไม่บันทึกไฟล์รูปสลิปหรือข้อความ OCR ดิบ'],
+    [''],
+    ['9. ข้อควรระวัง'],
     ['- อย่าแชร์ Channel Access Token ให้ผู้อื่น'],
+    ['- อย่าแชร์ Google Cloud Vision API key ให้ผู้อื่น และตั้ง Budget alert ใน Google Cloud เพื่อแจ้งเตือนค่าใช้จ่าย'],
     ['- หาก redeploy Web App URL จะเปลี่ยน ต้องเอา URL ใหม่มาใส่ในหน้าตั้งค่าใหม่'],
     ['- ระบบใช้ timezone Asia/Bangkok เป็นค่าเริ่มต้น'],
     ['- ข้อมูลทั้งหมดจะถูกเก็บใน Google Sheet นี้']
