@@ -70,6 +70,12 @@
             <small class="text-secondary" style="display:block; margin-top:4px;">รูปสลิปจะถูกส่งไปประมวลผลกับ Typhoon OCR และระบบจะไม่เก็บไฟล์รูปหรือข้อความ OCR ดิบ</small>
           </div>
           <div class="form-group">
+            <label for="groq-asr-api-key">Groq API key (จดรายรับ-รายจ่ายด้วยเสียง)</label>
+            <input type="password" id="groq-asr-api-key" placeholder="วาง API key จาก Groq เพื่อเปิดใช้การจดด้วยเสียง">
+            <small id="groq-asr-api-key-status" class="text-secondary" style="display:block; margin-top:6px;"></small>
+            <small class="text-secondary" style="display:block; margin-top:4px;">ข้อความเสียงจาก LINE จะถูกส่งไปถอดเสียงกับ Groq Whisper โดยตรง ระบบจะไม่เก็บไฟล์เสียงหรือข้อความถอดเสียงดิบ</small>
+          </div>
+          <div class="form-group">
             <label for="line-user-id">User ID (แจ้งเตือนส่วนตัว)</label>
             <div class="form-row">
               <input type="text" id="line-user-id" placeholder="ใส่ LINE User ID">

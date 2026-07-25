@@ -74,9 +74,9 @@ var LineService = (function () {
     }
   }
 
-  function getLineImageContent(token, messageId) {
+  function getLineMediaContent(token, messageId, mediaLabel) {
     if (!token) return { success: false, error: "ยังไม่ได้ตั้งค่า LINE Channel Access Token" };
-    if (!messageId) return { success: false, error: "ไม่พบรหัสรูปภาพจาก LINE" };
+    if (!messageId) return { success: false, error: "ไม่พบรหัส" + (mediaLabel || "ไฟล์") + "จาก LINE" };
     try {
       var response = UrlFetchApp.fetch(
         "https://api-data.line.me/v2/bot/message/" + encodeURIComponent(messageId) + "/content",
@@ -88,7 +88,7 @@ var LineService = (function () {
       if (response.getResponseCode() !== 200) {
         return {
           success: false,
-          error: "ดาวน์โหลดรูปจาก LINE ไม่สำเร็จ (HTTP " + response.getResponseCode() + ")",
+          error: "ดาวน์โหลด" + (mediaLabel || "ไฟล์") + "จาก LINE ไม่สำเร็จ (HTTP " + response.getResponseCode() + ")",
         };
       }
       return { success: true, blob: response.getBlob() };
@@ -97,12 +97,24 @@ var LineService = (function () {
     }
   }
 
-  function getTyphoonOcrApiKey() {
+  function getLineImageContent(token, messageId) {
+    return getLineMediaContent(token, messageId, "รูปภาพ");
+  }
+
+  function getLineAudioContent(token, messageId) {
+    return getLineMediaContent(token, messageId, "ข้อความเสียง");
+  }
+
+  function getTyphoonApiKey() {
     return PropertiesService.getScriptProperties().getProperty("TYPHOON_OCR_API_KEY") || "";
   }
 
+  function getGroqAsrApiKey() {
+    return PropertiesService.getScriptProperties().getProperty("GROQ_ASR_API_KEY") || "";
+  }
+
   function extractSlipText(blob) {
-    var apiKey = getTyphoonOcrApiKey();
+    var apiKey = getTyphoonApiKey();
     if (!apiKey) {
       return { success: false, error: "ยังไม่ได้ตั้งค่า Typhoon OCR API key สำหรับอ่านสลิป" };
     }
@@ -162,24 +174,93 @@ var LineService = (function () {
     }
   }
 
+  function getAudioFileExtension(contentType) {
+    var mimeType = String(contentType || "").toLowerCase().split(";")[0];
+    if (mimeType === "audio/mpeg" || mimeType === "audio/mp3") return "mp3";
+    if (mimeType === "audio/ogg" || mimeType === "application/ogg") return "ogg";
+    if (mimeType === "audio/opus") return "opus";
+    if (mimeType === "audio/wav" || mimeType === "audio/x-wav") return "wav";
+    if (mimeType === "audio/flac") return "flac";
+    // LINE Voice Message เป็น m4a โดยทั่วไป จึงตั้งชื่อไฟล์ให้ API ระบุชนิดเสียงได้ถูกต้อง
+    return "m4a";
+  }
+
+  function transcribeVoiceMessage(blob) {
+    var apiKey = getGroqAsrApiKey();
+    if (!apiKey) {
+      return { success: false, error: "ยังไม่ได้ตั้งค่า Groq API key สำหรับจดด้วยเสียง" };
+    }
+    try {
+      var audioBlob = blob.copyBlob ? blob.copyBlob() : blob;
+      if (audioBlob.setName) {
+        audioBlob.setName("line-voice." + getAudioFileExtension(audioBlob.getContentType()));
+      }
+      // เมื่อ payload มี Blob, Apps Script จะสร้าง multipart/form-data ให้โดยอัตโนมัติ
+      var response = UrlFetchApp.fetch("https://api.groq.com/openai/v1/audio/transcriptions", {
+        method: "post",
+        headers: { Authorization: "Bearer " + apiKey },
+        payload: {
+          file: audioBlob,
+          model: "whisper-large-v3",
+          language: "th",
+          response_format: "json",
+          temperature: 0,
+        },
+        muteHttpExceptions: true,
+      });
+      if (response.getResponseCode() < 200 || response.getResponseCode() >= 300) {
+        var errorBody = {};
+        try { errorBody = JSON.parse(response.getContentText()); } catch (ignore) {}
+        return {
+          success: false,
+          error: (errorBody.error && errorBody.error.message) ||
+            "Groq Whisper ถอดเสียงไม่สำเร็จ (HTTP " + response.getResponseCode() + ")",
+        };
+      }
+      var data = JSON.parse(response.getContentText());
+      var text = String((data && data.text) || "").trim();
+      return text ? { success: true, text: text } : { success: false, error: "ไม่พบข้อความที่ถอดได้จากเสียง" };
+    } catch (e) {
+      return { success: false, error: e.message };
+    }
+  }
+
   function normalizeAmount(value) {
     var amount = parseFloat(String(value || "").replace(/[^0-9.]/g, ""));
     return isNaN(amount) || amount <= 0 ? 0 : amount;
   }
 
+  function stripSlipMemoForAmount(text) {
+    var lines = String(text || "").split(/\r?\n/);
+    var memoLabel = /(?:บันทึกช่วยจำ|บันทึก|รายละเอียด|หมายเหตุ|โน้ต|โน้ท|note|memo|description)\s*[:：-]?\s*/i;
+    var nextSection = /^(?:จำนวนเงิน|ยอดเงิน|จาก|ไปยัง|ผู้โอน|ผู้รับ|ชื่อผู้รับ|เลขอ้างอิง|reference|ref\.?|วันที่|date|time|ผู้รับเงินสามารถ|scan|qr\b)/i;
+    var kept = [];
+    for (var i = 0; i < lines.length; i++) {
+      if (!memoLabel.test(lines[i])) {
+        kept.push(lines[i]);
+        continue;
+      }
+      // ไม่อนุญาตให้ตัวเลขที่อยู่ในช่อง Note เป็นยอดเงินสำรองของสลิป
+      // เพราะผู้ใช้มักพิมพ์ราคาไว้กำกับชื่อรายการ
+      while (i + 1 < lines.length && !nextSection.test(String(lines[i + 1]).trim())) i++;
+    }
+    return kept.join("\n");
+  }
+
   function findSlipAmount(text) {
+    var amountText = stripSlipMemoForAmount(text);
     var labeled = /(?:จำนวนเงิน|ยอดเงินที่โอน|ยอดโอน|ยอดรายการ|ยอดเงิน(?!คงเหลือ)|amount|total)\s*[:：]?\s*(?:THB|฿)?\s*([\d,]+(?:\.\d{1,2})?)/ig;
     var match;
-    while ((match = labeled.exec(text)) !== null) {
+    while ((match = labeled.exec(amountText)) !== null) {
       var labeledAmount = normalizeAmount(match[1]);
       if (labeledAmount) return labeledAmount;
     }
-    var moneyMatches = String(text || "").match(/(?:฿|THB\s*)\s*([\d,]+(?:\.\d{1,2})?)/ig) || [];
+    var moneyMatches = amountText.match(/(?:฿|THB\s*)\s*([\d,]+(?:\.\d{1,2})?)/ig) || [];
     for (var i = 0; i < moneyMatches.length; i++) {
       var moneyAmount = normalizeAmount(moneyMatches[i]);
       if (moneyAmount) return moneyAmount;
     }
-    var decimals = String(text || "").match(/\b[\d,]+\.\d{2}\b/g) || [];
+    var decimals = amountText.match(/\b[\d,]+\.\d{2}\b/g) || [];
     for (var j = 0; j < decimals.length; j++) {
       var decimalAmount = normalizeAmount(decimals[j]);
       if (decimalAmount) return decimalAmount;
@@ -251,13 +332,65 @@ var LineService = (function () {
     return "อื่นๆ";
   }
 
+  function cleanSlipMemo(value) {
+    return String(value || "")
+      // ตัวเลขใน Note อาจเป็นราคาที่ผู้ใช้พิมพ์กำกับไว้ จึงไม่ใช้เป็นส่วนของชื่อรายการ
+      .replace(/(?:^|\s)(?:฿\s*|THB\s*)?\d[\d,]*(?:\.\d{1,2})?(?=\s|$)/gi, " ")
+      .replace(/\s+/g, " ")
+      .replace(/^[\s:：\-–—]+|[\s:：\-–—]+$/g, "")
+      .trim()
+      .slice(0, 120);
+  }
+
+  function findSlipMemo(text) {
+    var lines = String(text || "")
+      .split(/\r?\n/)
+      .map(function(line) { return String(line || "").trim(); })
+      .filter(function(line) { return !!line; });
+    var memoLabel = /(?:บันทึกช่วยจำ|บันทึก|รายละเอียด|หมายเหตุ|โน้ต|โน้ท|note|memo|description)\s*[:：-]?\s*/i;
+    var nextSection = /^(?:จำนวนเงิน|ยอดเงิน|จาก|ไปยัง|ผู้โอน|ผู้รับ|ชื่อผู้รับ|เลขอ้างอิง|reference|ref\.?|วันที่|date|time|ผู้รับเงินสามารถ|scan|qr\b)/i;
+
+    for (var i = 0; i < lines.length; i++) {
+      if (!memoLabel.test(lines[i])) continue;
+      var memoParts = [lines[i].replace(memoLabel, "").trim()];
+
+      // ธนาคารจำนวนมากแสดงหัวข้อ Note คนละบรรทัดกับข้อความ จึงอ่านบรรทัดถัดไปด้วย
+      for (var j = i + 1; j < lines.length && j <= i + 2; j++) {
+        if (nextSection.test(lines[j]) || memoLabel.test(lines[j])) break;
+        memoParts.push(lines[j]);
+      }
+
+      var memo = cleanSlipMemo(memoParts.join(" "));
+      // ต้องเหลืออักษรจริงหลังตัดตัวเลขออก จึงถือว่าเป็นชื่อรายการที่ใช้ได้
+      if (/[A-Za-zก-๙]/.test(memo)) return memo;
+    }
+    return "";
+  }
+
+  function getMemoFinanceCategory(memo, categories, type) {
+    if (!memo) return getDefaultFinanceCategory(categories, type);
+
+    // ใช้กติกา keyword เดียวกับการพิมพ์รายรับ-รายจ่ายด้วยข้อความ
+    // และรับเฉพาะหมวดที่มีชนิดตรงกับทิศทางเงินในสลิป
+    var analysis = parseFinanceMessage(memo + " 1", categories || []);
+    if (analysis && analysis.category) {
+      var list = categories || [];
+      for (var i = 0; i < list.length; i++) {
+        if (list[i].name === analysis.category && list[i].type === type) return list[i].name;
+      }
+    }
+    return getDefaultFinanceCategory(categories, type);
+  }
+
   function parseFinanceSlip(text, categories, fallbackDate) {
     var amount = findSlipAmount(text);
     if (!amount) return null;
     var type = inferSlipType(text);
+    var memo = findSlipMemo(text);
     var counterparty = findSlipCounterparty(text, type);
     var title = type === "รายรับ" ? "รับเงินจากสลิป" : "โอนเงินจากสลิป";
-    if (counterparty) title += " - " + counterparty;
+    if (memo) title = memo;
+    else if (counterparty) title += " - " + counterparty;
     var reference = findReferenceNumber(text);
     var noteParts = ["บันทึกจากสลิป LINE"];
     if (reference) noteParts.push("เลขอ้างอิง: " + reference);
@@ -265,7 +398,7 @@ var LineService = (function () {
       title: title,
       amount: amount,
       type: type,
-      category: getDefaultFinanceCategory(categories, type),
+      category: getMemoFinanceCategory(memo, categories, type),
       date: findSlipDate(text, fallbackDate),
       note: noteParts.join(" | "),
     };
@@ -284,18 +417,79 @@ var LineService = (function () {
     );
   }
 
+  function normalizeThaiDigits(text) {
+    var thaiDigits = "๐๑๒๓๔๕๖๗๘๙";
+    return String(text || "").replace(/[๐-๙]/g, function(digit) {
+      return String(thaiDigits.indexOf(digit));
+    });
+  }
+
+  function thaiNumberWordsToNumber(words) {
+    var tokens = String(words || "").match(/ศูนย์|หนึ่ง|เอ็ด|สอง|ยี่|สาม|สี่|ห้า|หก|เจ็ด|แปด|เก้า|สิบ|ร้อย|พัน|หมื่น|แสน|ล้าน/g) || [];
+    if (tokens.length === 0) return 0;
+    var digits = { "ศูนย์": 0, "หนึ่ง": 1, "เอ็ด": 1, "สอง": 2, "ยี่": 2, "สาม": 3, "สี่": 4, "ห้า": 5, "หก": 6, "เจ็ด": 7, "แปด": 8, "เก้า": 9 };
+    var units = { "สิบ": 10, "ร้อย": 100, "พัน": 1000, "หมื่น": 10000, "แสน": 100000 };
+    var total = 0;
+    var group = 0;
+    var digit = 0;
+    for (var i = 0; i < tokens.length; i++) {
+      var token = tokens[i];
+      if (digits.hasOwnProperty(token)) {
+        digit = digits[token];
+      } else if (token === "ล้าน") {
+        total += (group + digit || 1) * 1000000;
+        group = 0;
+        digit = 0;
+      } else {
+        group += (digit || 1) * units[token];
+        digit = 0;
+      }
+    }
+    return total + group + digit;
+  }
+
+  function findFinanceAmount(text) {
+    var original = String(text || "");
+    var normalized = normalizeThaiDigits(original);
+    var digitMatches = normalized.match(/\d+(?:\.\d+)?/g);
+    if (digitMatches && digitMatches.length > 0) {
+      var amountText = digitMatches[digitMatches.length - 1];
+      var amount = parseFloat(amountText);
+      if (!isNaN(amount) && amount > 0) {
+        var start = normalized.lastIndexOf(amountText);
+        return { amount: amount, start: start, end: start + amountText.length };
+      }
+    }
+
+    // รองรับคำพูด เช่น "ค่ากาแฟห้าสิบบาท" โดยใช้คำที่อยู่ติดกับคำว่า "บาท" เท่านั้น
+    var spokenPattern = /((?:(?:ศูนย์|หนึ่ง|เอ็ด|สอง|ยี่|สาม|สี่|ห้า|หก|เจ็ด|แปด|เก้า|สิบ|ร้อย|พัน|หมื่น|แสน|ล้าน)\s*)+)\s*บาท/g;
+    var spokenMatch;
+    var lastSpokenMatch = null;
+    while ((spokenMatch = spokenPattern.exec(original)) !== null) lastSpokenMatch = spokenMatch;
+    if (lastSpokenMatch) {
+      var spokenAmount = thaiNumberWordsToNumber(lastSpokenMatch[1]);
+      if (spokenAmount > 0) {
+        return {
+          amount: spokenAmount,
+          start: lastSpokenMatch.index,
+          end: lastSpokenMatch.index + lastSpokenMatch[1].length,
+        };
+      }
+    }
+    return null;
+  }
+
   function parseFinanceMessage(text, categories) {
     var t = String(text || "").trim();
     if (!t) return null;
 
-    var amountMatches = t.match(/\d+(?:\.\d+)?/g);
-    if (!amountMatches || amountMatches.length === 0) return null;
-    var amountStr = amountMatches[amountMatches.length - 1];
-    var amount = parseFloat(amountStr);
-    if (isNaN(amount) || amount <= 0) return null;
-
-    var lastIndex = t.lastIndexOf(amountStr);
-    var title = (t.slice(0, lastIndex) + t.slice(lastIndex + amountStr.length))
+    var amountInfo = findFinanceAmount(t);
+    if (!amountInfo) return null;
+    var amount = amountInfo.amount;
+    var afterAmount = t.slice(amountInfo.end);
+    var currency = afterAmount.match(/^\s*(?:บาท|baht|THB|฿)/i);
+    var removeEnd = amountInfo.end + (currency ? currency[0].length : 0);
+    var title = (t.slice(0, amountInfo.start) + t.slice(removeEnd))
       .replace(/\s+/g, " ")
       .trim();
     if (!title) title = "ไม่ระบุรายการ";
@@ -2761,6 +2955,46 @@ var LineService = (function () {
                 uid,
                 "Parsed finance slip",
                 JSON.stringify({ message_id: ev.message.id, type: slipRecord.type, amount: slipRecord.amount, date: slipRecord.date })
+              );
+            }
+            handled = true;
+          }
+
+          // Voice Message: ถอดเสียงแล้วใช้ parser รายรับ-รายจ่ายตัวเดียวกับข้อความ
+          if (!handled && ev.message && ev.message.type === "audio" && ev.replyToken && sourceType === "user") {
+            maybeShowLoading(sourceType, userId, "finance_voice_asr");
+            var audioResult = getLineAudioContent(token, ev.message.id);
+            var transcriptionResult = audioResult.success ? transcribeVoiceMessage(audioResult.blob) : audioResult;
+            var voiceRecords = transcriptionResult.success
+              ? parseFinanceItems(transcriptionResult.text, categories)
+              : null;
+
+            if (!voiceRecords || voiceRecords.length === 0) {
+              var voiceError = transcriptionResult.error || "ไม่พบชื่อรายการและยอดเงินจากเสียง";
+              var voiceErrorReply = this.replyMessage(ev.replyToken, [{
+                type: "text",
+                text: "จดรายการจากเสียงไม่สำเร็จ: " + voiceError +
+                  "\nกรุณาพูดชื่อรายการและยอดเงินให้ชัดเจน เช่น ค่ากาแฟ 50 บาท",
+              }]);
+              if (!voiceErrorReply.success) {
+                LogService.logEvent("LINE_PUSH_ERROR", uid, voiceErrorReply.error, JSON.stringify({ type: "finance_voice_error_reply" }));
+              }
+              LogService.logEvent("FINANCE_VOICE_ASR_ERROR", uid, voiceError, JSON.stringify({ message_id: ev.message.id }));
+            } else {
+              for (var voiceIndex = 0; voiceIndex < voiceRecords.length; voiceIndex++) {
+                voiceRecords[voiceIndex].note = "บันทึกจากเสียง LINE";
+              }
+              clearUserState(uid);
+              setUserState(uid, { flow: "finance", records: voiceRecords, step: "scope", source: "line_voice" });
+              var voiceScopeReply = this.replyMessage(ev.replyToken, [buildFinanceScopeQuestion(voiceRecords)]);
+              if (!voiceScopeReply.success) {
+                LogService.logEvent("LINE_PUSH_ERROR", uid, voiceScopeReply.error, JSON.stringify({ type: "finance_voice_scope_ask" }));
+              }
+              LogService.logEvent(
+                "FINANCE_VOICE_PARSED",
+                uid,
+                "Parsed finance voice message",
+                JSON.stringify({ message_id: ev.message.id, records: voiceRecords.length })
               );
             }
             handled = true;

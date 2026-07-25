@@ -443,6 +443,7 @@
     renderLineGroupList();
     updateTriggerStatusUI();
     updateTyphoonOcrStatusUI();
+    updateGroqAsrStatusUI();
   }
 
   async function updateTriggerStatusUI() {
@@ -468,7 +469,20 @@
         ? 'ตั้งค่า Typhoon OCR แล้ว — ส่งรูปสลิปในแชตส่วนตัวเพื่อเริ่มจดรายการ'
         : 'ยังไม่ได้ตั้งค่า — ระบบจะยังอ่านรูปสลิปไม่ได้';
     } catch (e) {
-      status.textContent = 'ตรวจสอบสถานะ OCR ไม่สำเร็จ';
+      status.textContent = 'ตรวจสอบสถานะ Typhoon OCR ไม่สำเร็จ';
+    }
+  }
+
+  async function updateGroqAsrStatusUI() {
+    const status = document.getElementById('groq-asr-api-key-status');
+    if (!status) return;
+    try {
+      const result = await gsRun('getGroqAsrStatus');
+      status.textContent = result && result.configured
+        ? 'ตั้งค่า Groq Whisper แล้ว — ส่ง Voice Message ในแชตส่วนตัวเพื่อเริ่มจดรายการ'
+        : 'ยังไม่ได้ตั้งค่า — ระบบจะยังจดรายการด้วยเสียงไม่ได้';
+    } catch (e) {
+      status.textContent = 'ตรวจสอบสถานะ Groq ไม่สำเร็จ';
     }
   }
 
@@ -1765,12 +1779,15 @@ function renderDashboard() {
     const webAppUrl = document.getElementById('web-app-url').value.trim();
     const reminder = document.getElementById('default-reminder').value;
     const typhoonOcrApiKey = document.getElementById('typhoon-ocr-api-key').value.trim();
+    const groqAsrApiKey = document.getElementById('groq-asr-api-key').value.trim();
     try {
       await gsRun('saveLineSetup', token, userId);
       await gsRun('saveSetting', 'WEB_APP_URL', webAppUrl);
       await gsRun('saveSetting', 'DEFAULT_REMIND_MINUTES', reminder);
       if (typhoonOcrApiKey) await gsRun('saveTyphoonOcrApiKey', typhoonOcrApiKey);
+      if (groqAsrApiKey) await gsRun('saveGroqAsrApiKey', groqAsrApiKey);
       document.getElementById('typhoon-ocr-api-key').value = '';
+      document.getElementById('groq-asr-api-key').value = '';
       showToast('บันทึกการตั้งค่า LINE เรียบร้อย', 'success');
       await loadSettings();
     } catch (e) {

@@ -216,10 +216,19 @@ function seedReadmeSheet() {
     ['กติกาการบันทึก: สลิปโอนออกและสลิปที่ระบุทิศทางไม่ได้จะถูกตั้งเป็นรายจ่าย ส่วนสลิปเงินเข้า/รับเงินจะถูกตั้งเป็นรายรับ โดยค่าเริ่มต้น'],
     ['ระบบไม่บันทึกไฟล์รูปสลิปหรือข้อความ OCR ดิบ'],
     [''],
-    ['9. ข้อควรระวัง'],
+    ['9. วิธีจดรายรับ-รายจ่ายด้วยเสียง'],
+    ['9.1 สมัครใช้งาน Groq และสร้าง API key จาก Groq Console'],
+    ['9.2 ใน Web App ไปที่หน้า ตั้งค่า → เชื่อมต่อ LINE แล้วใส่ Groq API key จากนั้นกดบันทึก'],
+    ['9.3 ส่ง Voice Message หา LINE Bot ในแชตส่วนตัว'],
+    ['9.4 พูดชื่อรายการและยอดเงินให้ชัดเจน เช่น ค่ากาแฟ 50 บาท หรือ ค่าแท็กซี่หนึ่งร้อยยี่สิบบาท'],
+    ['9.5 ระบบถอดเสียง จัดหมวดหมู่ และถามขอบเขตค่าใช้จ่ายผ่าน Quick Reply: ส่วนตัว หรือ ที่ทำงาน'],
+    ['9.6 ตรวจสอบ Flex Message แล้วกด บันทึก หรือ ยกเลิก'],
+    ['ระบบไม่เดายอดเงินเมื่อฟังยอดไม่ชัด และไม่บันทึกไฟล์เสียงหรือข้อความที่ถอดเสียงดิบ'],
+    [''],
+    ['10. ข้อควรระวัง'],
     ['- อย่าแชร์ Channel Access Token ให้ผู้อื่น'],
-    ['- อย่าแชร์ Typhoon OCR API key ให้ผู้อื่น และตรวจสอบข้อกำหนด/โควต้าปัจจุบันของ Typhoon ก่อนใช้งานจริง'],
-    ['- รูปสลิปจะถูกส่งไปประมวลผลกับ Typhoon OCR ระบบจะไม่เก็บไฟล์รูปหรือข้อความ OCR ดิบ'],
+    ['- อย่าแชร์ Typhoon OCR API key หรือ Groq API key ให้ผู้อื่น และตรวจสอบข้อกำหนด/โควต้าปัจจุบันของแต่ละบริการก่อนใช้งานจริง'],
+    ['- รูปสลิปจะถูกส่งไปประมวลผลกับ Typhoon OCR ส่วนข้อความเสียงจะถูกส่งไปถอดเสียงกับ Groq Whisper ระบบจะไม่เก็บไฟล์สื่อหรือข้อความที่อ่าน/ถอดเสียงดิบ'],
     ['- หาก redeploy Web App URL จะเปลี่ยน ต้องเอา URL ใหม่มาใส่ในหน้าตั้งค่าใหม่'],
     ['- ระบบใช้ timezone Asia/Bangkok เป็นค่าเริ่มต้น'],
     ['- ข้อมูลทั้งหมดจะถูกเก็บใน Google Sheet นี้']
@@ -468,6 +477,18 @@ function saveTyphoonOcrApiKey(apiKey) {
   var properties = PropertiesService.getScriptProperties();
   if (key) properties.setProperty('TYPHOON_OCR_API_KEY', key);
   else properties.deleteProperty('TYPHOON_OCR_API_KEY');
+  return { success: true, configured: !!key };
+}
+
+/* ---------- Groq ASR API ---------- */
+function getGroqAsrStatus() {
+  return { configured: !!PropertiesService.getScriptProperties().getProperty('GROQ_ASR_API_KEY') };
+}
+function saveGroqAsrApiKey(apiKey) {
+  var key = String(apiKey || '').trim();
+  var properties = PropertiesService.getScriptProperties();
+  if (key) properties.setProperty('GROQ_ASR_API_KEY', key);
+  else properties.deleteProperty('GROQ_ASR_API_KEY');
   return { success: true, configured: !!key };
 }
 
