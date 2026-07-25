@@ -74,6 +74,194 @@ var LineService = (function () {
     }
   }
 
+  function getLineImageContent(token, messageId) {
+    if (!token) return { success: false, error: "ยังไม่ได้ตั้งค่า LINE Channel Access Token" };
+    if (!messageId) return { success: false, error: "ไม่พบรหัสรูปภาพจาก LINE" };
+    try {
+      var response = UrlFetchApp.fetch(
+        "https://api-data.line.me/v2/bot/message/" + encodeURIComponent(messageId) + "/content",
+        {
+          headers: { Authorization: "Bearer " + token },
+          muteHttpExceptions: true,
+        }
+      );
+      if (response.getResponseCode() !== 200) {
+        return {
+          success: false,
+          error: "ดาวน์โหลดรูปจาก LINE ไม่สำเร็จ (HTTP " + response.getResponseCode() + ")",
+        };
+      }
+      return { success: true, blob: response.getBlob() };
+    } catch (e) {
+      return { success: false, error: e.message };
+    }
+  }
+
+  function getSlipOcrApiKey() {
+    return PropertiesService.getScriptProperties().getProperty("VISION_API_KEY") || "";
+  }
+
+  function extractSlipText(blob) {
+    var apiKey = getSlipOcrApiKey();
+    if (!apiKey) {
+      return { success: false, error: "ยังไม่ได้ตั้งค่า Google Cloud Vision API key สำหรับอ่านสลิป" };
+    }
+    try {
+      var payload = {
+        requests: [{
+          image: { content: Utilities.base64Encode(blob.getBytes()) },
+          features: [{ type: "DOCUMENT_TEXT_DETECTION", maxResults: 1 }],
+          imageContext: { languageHints: ["th", "en"] },
+        }],
+      };
+      var response = UrlFetchApp.fetch("https://vision.googleapis.com/v1/images:annotate?key=" + encodeURIComponent(apiKey), {
+        method: "post",
+        contentType: "application/json",
+        payload: JSON.stringify(payload),
+        muteHttpExceptions: true,
+      });
+      if (response.getResponseCode() !== 200) {
+        return {
+          success: false,
+          error: "OCR อ่านสลิปไม่สำเร็จ (HTTP " + response.getResponseCode() + ")",
+        };
+      }
+      var data = JSON.parse(response.getContentText());
+      var item = data.responses && data.responses[0];
+      if (!item || item.error) {
+        return { success: false, error: (item && item.error && item.error.message) || "OCR ไม่สามารถอ่านข้อความจากสลิปได้" };
+      }
+      var text = (item.fullTextAnnotation && item.fullTextAnnotation.text) ||
+        (item.textAnnotations && item.textAnnotations[0] && item.textAnnotations[0].description) || "";
+      text = String(text || "").trim();
+      return text ? { success: true, text: text } : { success: false, error: "ไม่พบข้อความที่อ่านได้ในสลิป" };
+    } catch (e) {
+      return { success: false, error: e.message };
+    }
+  }
+
+  function normalizeAmount(value) {
+    var amount = parseFloat(String(value || "").replace(/[^0-9.]/g, ""));
+    return isNaN(amount) || amount <= 0 ? 0 : amount;
+  }
+
+  function findSlipAmount(text) {
+    var labeled = /(?:จำนวนเงิน|ยอดเงินที่โอน|ยอดโอน|ยอดรายการ|ยอดเงิน(?!คงเหลือ)|amount|total)\s*[:：]?\s*(?:THB|฿)?\s*([\d,]+(?:\.\d{1,2})?)/ig;
+    var match;
+    while ((match = labeled.exec(text)) !== null) {
+      var labeledAmount = normalizeAmount(match[1]);
+      if (labeledAmount) return labeledAmount;
+    }
+    var moneyMatches = String(text || "").match(/(?:฿|THB\s*)\s*([\d,]+(?:\.\d{1,2})?)/ig) || [];
+    for (var i = 0; i < moneyMatches.length; i++) {
+      var moneyAmount = normalizeAmount(moneyMatches[i]);
+      if (moneyAmount) return moneyAmount;
+    }
+    var decimals = String(text || "").match(/\b[\d,]+\.\d{2}\b/g) || [];
+    for (var j = 0; j < decimals.length; j++) {
+      var decimalAmount = normalizeAmount(decimals[j]);
+      if (decimalAmount) return decimalAmount;
+    }
+    return 0;
+  }
+
+  function findSlipDate(text, fallbackDate) {
+    var iso = String(text || "").match(/\b(20\d{2})[-\/.](\d{1,2})[-\/.](\d{1,2})\b/);
+    if (iso) return iso[1] + "-" + ("0" + iso[2]).slice(-2) + "-" + ("0" + iso[3]).slice(-2);
+    var thai = String(text || "").match(/\b(\d{1,2})[-\/.](\d{1,2})[-\/.](\d{2,4})\b/);
+    if (!thai) return fallbackDate;
+    var year = parseInt(thai[3], 10);
+    if (year > 2400) year -= 543;
+    if (year < 100) year += 2000;
+    var month = parseInt(thai[2], 10);
+    var day = parseInt(thai[1], 10);
+    if (month < 1 || month > 12 || day < 1 || day > 31) return fallbackDate;
+    return year + "-" + ("0" + month).slice(-2) + "-" + ("0" + day).slice(-2);
+  }
+
+  function inferSlipType(text) {
+    var normalized = String(text || "").toLowerCase();
+    var expenseSignals = ["โอนเงินสำเร็จ", "โอนออก", "รายการโอน", "จ่ายเงิน", "payment successful", "transfer successful"];
+    for (var e = 0; e < expenseSignals.length; e++) {
+      if (normalized.indexOf(expenseSignals[e]) >= 0) return "รายจ่าย";
+    }
+    var incomeSignals = ["เงินเข้า", "รับเงิน", "ได้รับเงิน", "โอนเข้าบัญชี", "credit", "received"];
+    for (var i = 0; i < incomeSignals.length; i++) {
+      if (normalized.indexOf(incomeSignals[i]) >= 0) return "รายรับ";
+    }
+    // สลิปโอนออกหรือข้อความที่ระบุทิศทางไม่ได้ ให้จดเป็นรายจ่ายตามกติกาของระบบ
+    return "รายจ่าย";
+  }
+
+  function findSlipCounterparty(text, type) {
+    var labels = type === "รายรับ"
+      ? ["ผู้โอน", "จาก", "sender", "from"]
+      : ["ชื่อผู้รับ", "ผู้รับเงิน", "ผู้รับ", "ไปยัง", "recipient", "to"];
+    var lines = String(text || "").split(/\r?\n/).map(function(line) { return String(line).trim(); });
+    for (var i = 0; i < lines.length; i++) {
+      var lower = lines[i].toLowerCase();
+      for (var j = 0; j < labels.length; j++) {
+        if (lower.indexOf(labels[j]) < 0) continue;
+        var inline = lines[i].replace(/^.*?(?:ชื่อผู้รับ|ผู้รับเงิน|ผู้รับ|ผู้โอน|ไปยัง|จาก|recipient|sender|from|to)\s*[:：-]?\s*/i, "").trim();
+        if (inline && inline.length >= 2 && inline.length <= 80) return inline;
+        if (lines[i + 1] && lines[i + 1].length >= 2 && lines[i + 1].length <= 80) return lines[i + 1];
+      }
+    }
+    return "";
+  }
+
+  function findReferenceNumber(text) {
+    var match = String(text || "").match(/(?:เลขที่รายการ|หมายเลขอ้างอิง|reference(?:\s*no\.?)?|ref\.?)(?:\s*[:：-])?\s*([A-Z0-9-]{6,})/i);
+    return match ? match[1] : "";
+  }
+
+  function getDefaultFinanceCategory(categories, type) {
+    var list = categories || [];
+    for (var i = 0; i < list.length; i++) {
+      if (list[i].name === "อื่นๆ" && list[i].type === type) return list[i].name;
+    }
+    for (var j = 0; j < list.length; j++) {
+      if (list[j].name === "อื่นๆ") return list[j].name;
+    }
+    for (var k = 0; k < list.length; k++) {
+      if (list[k].type === type) return list[k].name;
+    }
+    return "อื่นๆ";
+  }
+
+  function parseFinanceSlip(text, categories, fallbackDate) {
+    var amount = findSlipAmount(text);
+    if (!amount) return null;
+    var type = inferSlipType(text);
+    var counterparty = findSlipCounterparty(text, type);
+    var title = type === "รายรับ" ? "รับเงินจากสลิป" : "โอนเงินจากสลิป";
+    if (counterparty) title += " - " + counterparty;
+    var reference = findReferenceNumber(text);
+    var noteParts = ["บันทึกจากสลิป LINE"];
+    if (reference) noteParts.push("เลขอ้างอิง: " + reference);
+    return {
+      title: title,
+      amount: amount,
+      type: type,
+      category: getDefaultFinanceCategory(categories, type),
+      date: findSlipDate(text, fallbackDate),
+      note: noteParts.join(" | "),
+    };
+  }
+
+  function buildFinanceScopeQuestion(records) {
+    var itemSummary = records.map(function(record) {
+      return record.title + " ฿" + Number(record.amount).toLocaleString("th-TH");
+    }).join("\n");
+    return makeQuickReplyMessage(
+      "พบ " + records.length + " รายการ\n" + itemSummary + "\n\nเป็นค่าใช้จ่ายส่วนไหนคะ",
+      [
+        { type: "message", label: "ส่วนตัว", text: "ส่วนตัว" },
+        { type: "message", label: "ที่ทำงาน", text: "ที่ทำงาน" },
+      ]
+    );
+  }
+
   function parseFinanceMessage(text, categories) {
     var t = String(text || "").trim();
     if (!t) return null;
@@ -1894,14 +2082,16 @@ var LineService = (function () {
           var recordsToSave = state.records || [];
           var savedRecords = [];
           for (var k = 0; k < recordsToSave.length; k++) {
+            var recordDate = recordsToSave[k].date || todayStr;
+            var recordNote = recordsToSave[k].note || "บันทึกจาก LINE";
             var rec = FinanceService.addFinanceRecord({
               type: recordsToSave[k].type,
               title: recordsToSave[k].title,
               amount: recordsToSave[k].amount,
               category: recordsToSave[k].category,
               scope: recordsToSave[k].scope,
-              date: todayStr,
-              note: "บันทึกจาก LINE",
+              date: recordDate,
+              note: recordNote,
             });
             savedRecords.push(rec);
           }
@@ -2021,14 +2211,16 @@ var LineService = (function () {
           var records = state.records || [];
           var savedRecords = [];
           for (var i = 0; i < records.length; i++) {
+            var recordDate = records[i].date || todayStr;
+            var recordNote = records[i].note || "บันทึกจาก LINE";
             var rec = FinanceService.addFinanceRecord({
               type: records[i].type,
               title: records[i].title,
               amount: records[i].amount,
               category: records[i].category,
               scope: records[i].scope,
-              date: todayStr,
-              note: "บันทึกจาก LINE",
+              date: recordDate,
+              note: recordNote,
             });
             savedRecords.push(rec);
           }
@@ -2531,28 +2723,47 @@ var LineService = (function () {
             }
           }
 
+          // จดรายรับ-รายจ่ายจากรูปสลิป (เฉพาะแชทส่วนตัว)
+          if (!handled && ev.message && ev.message.type === "image" && ev.replyToken && sourceType === "user") {
+            maybeShowLoading(sourceType, userId, "finance_slip_ocr");
+            var imageResult = getLineImageContent(token, ev.message.id);
+            var ocrResult = imageResult.success ? extractSlipText(imageResult.blob) : imageResult;
+            var slipRecord = ocrResult.success ? parseFinanceSlip(ocrResult.text, categories, todayStr) : null;
+
+            if (!slipRecord) {
+              var slipError = ocrResult.error || "ไม่พบยอดเงินที่อ่านได้จากสลิป";
+              var errorReply = this.replyMessage(ev.replyToken, [{
+                type: "text",
+                text: "อ่านสลิปไม่สำเร็จ: " + slipError + "\nกรุณาส่งสลิปที่เห็นยอดเงินชัดเจน หรือพิมพ์รายการ เช่น ข้าวมันไก่ 50",
+              }]);
+              if (!errorReply.success) {
+                LogService.logEvent("LINE_PUSH_ERROR", uid, errorReply.error, JSON.stringify({ type: "finance_slip_error_reply" }));
+              }
+              LogService.logEvent("FINANCE_SLIP_OCR_ERROR", uid, slipError, JSON.stringify({ message_id: ev.message.id }));
+            } else {
+              clearUserState(uid);
+              setUserState(uid, { flow: "finance", records: [slipRecord], step: "scope", source: "line_slip" });
+              var scopeReply = this.replyMessage(ev.replyToken, [buildFinanceScopeQuestion([slipRecord])]);
+              if (!scopeReply.success) {
+                LogService.logEvent("LINE_PUSH_ERROR", uid, scopeReply.error, JSON.stringify({ type: "finance_slip_scope_ask" }));
+              }
+              LogService.logEvent(
+                "FINANCE_SLIP_PARSED",
+                uid,
+                "Parsed finance slip",
+                JSON.stringify({ message_id: ev.message.id, type: slipRecord.type, amount: slipRecord.amount, date: slipRecord.date })
+              );
+            }
+            handled = true;
+          }
+
           // เริ่มบันทึกรายรับ-รายจ่ายจากข้อความ (เฉพาะแชทส่วนตัว ไม่ทำงานในกลุ่ม/ห้อง)
           if (!handled && messageText && ev.replyToken && sourceType !== "group" && sourceType !== "room") {
             var parsedRecords = parseFinanceItems(messageText, categories);
             if (parsedRecords && parsedRecords.length > 0) {
               clearUserState(uid);
               setUserState(uid, { flow: "finance", records: parsedRecords, step: "scope" });
-              var itemSummary = parsedRecords
-                .map(function (r) {
-                  return r.title + " ฿" + Number(r.amount).toLocaleString("th-TH");
-                })
-                .join("\n");
-              var scopeMsg = makeQuickReplyMessage(
-                "พบ " +
-                  parsedRecords.length +
-                  " รายการ\n" +
-                  itemSummary +
-                  "\n\nเป็นค่าใช้จ่ายส่วนไหนคะ",
-                [
-                  { type: "message", label: "ส่วนตัว", text: "ส่วนตัว" },
-                  { type: "message", label: "ที่ทำงาน", text: "ที่ทำงาน" },
-                ],
-              );
+              var scopeMsg = buildFinanceScopeQuestion(parsedRecords);
               var scopeReplyRes = this.replyMessage(ev.replyToken, [scopeMsg]);
               if (!scopeReplyRes.success) {
                 LogService.logEvent(

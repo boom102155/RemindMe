@@ -441,6 +441,18 @@ function saveLineSetup(token, userId) { return LineService.saveLineSetup(token, 
 function sendLineMessage(userId, message) { return LineService.sendLineMessage(userId, message); }
 function testLineMessage() { return LineService.testLineMessage(); }
 
+/* ---------- Slip OCR API ---------- */
+function getSlipOcrStatus() {
+  return { configured: !!PropertiesService.getScriptProperties().getProperty('VISION_API_KEY') };
+}
+function saveSlipOcrApiKey(apiKey) {
+  var key = String(apiKey || '').trim();
+  var properties = PropertiesService.getScriptProperties();
+  if (key) properties.setProperty('VISION_API_KEY', key);
+  else properties.deleteProperty('VISION_API_KEY');
+  return { success: true, configured: !!key };
+}
+
 /* ---------- Trigger API ---------- */
 function setupReminderTrigger() { return TriggerService.setupReminderTrigger(); }
 function removeTrigger() { return TriggerService.removeTrigger(); }
