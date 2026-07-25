@@ -442,7 +442,7 @@
     if (richMenuDisplay) richMenuDisplay.value = state.settings.RICH_MENU_ID || '';
     renderLineGroupList();
     updateTriggerStatusUI();
-    updateSlipOcrStatusUI();
+    updateTyphoonOcrStatusUI();
   }
 
   async function updateTriggerStatusUI() {
@@ -459,13 +459,13 @@
     } catch (e) { /* ignore */ }
   }
 
-  async function updateSlipOcrStatusUI() {
-    const status = document.getElementById('vision-api-key-status');
+  async function updateTyphoonOcrStatusUI() {
+    const status = document.getElementById('typhoon-ocr-api-key-status');
     if (!status) return;
     try {
-      const result = await gsRun('getSlipOcrStatus');
+      const result = await gsRun('getTyphoonOcrStatus');
       status.textContent = result && result.configured
-        ? 'ตั้งค่า OCR แล้ว — ส่งรูปสลิปในแชตส่วนตัวเพื่อเริ่มจดรายการ'
+        ? 'ตั้งค่า Typhoon OCR แล้ว — ส่งรูปสลิปในแชตส่วนตัวเพื่อเริ่มจดรายการ'
         : 'ยังไม่ได้ตั้งค่า — ระบบจะยังอ่านรูปสลิปไม่ได้';
     } catch (e) {
       status.textContent = 'ตรวจสอบสถานะ OCR ไม่สำเร็จ';
@@ -1764,13 +1764,13 @@ function renderDashboard() {
     const userId = document.getElementById('line-user-id').value.trim();
     const webAppUrl = document.getElementById('web-app-url').value.trim();
     const reminder = document.getElementById('default-reminder').value;
-    const visionApiKey = document.getElementById('vision-api-key').value.trim();
+    const typhoonOcrApiKey = document.getElementById('typhoon-ocr-api-key').value.trim();
     try {
       await gsRun('saveLineSetup', token, userId);
       await gsRun('saveSetting', 'WEB_APP_URL', webAppUrl);
       await gsRun('saveSetting', 'DEFAULT_REMIND_MINUTES', reminder);
-      if (visionApiKey) await gsRun('saveSlipOcrApiKey', visionApiKey);
-      document.getElementById('vision-api-key').value = '';
+      if (typhoonOcrApiKey) await gsRun('saveTyphoonOcrApiKey', typhoonOcrApiKey);
+      document.getElementById('typhoon-ocr-api-key').value = '';
       showToast('บันทึกการตั้งค่า LINE เรียบร้อย', 'success');
       await loadSettings();
     } catch (e) {

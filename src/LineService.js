@@ -97,42 +97,64 @@ var LineService = (function () {
     }
   }
 
-  function getSlipOcrApiKey() {
-    return PropertiesService.getScriptProperties().getProperty("VISION_API_KEY") || "";
+  function getTyphoonOcrApiKey() {
+    return PropertiesService.getScriptProperties().getProperty("TYPHOON_OCR_API_KEY") || "";
   }
 
   function extractSlipText(blob) {
-    var apiKey = getSlipOcrApiKey();
+    var apiKey = getTyphoonOcrApiKey();
     if (!apiKey) {
-      return { success: false, error: "ยังไม่ได้ตั้งค่า Google Cloud Vision API key สำหรับอ่านสลิป" };
+      return { success: false, error: "ยังไม่ได้ตั้งค่า Typhoon OCR API key สำหรับอ่านสลิป" };
     }
     try {
+      var mimeType = String(blob.getContentType() || "").toLowerCase();
+      if (mimeType !== "image/jpeg" && mimeType !== "image/jpg" && mimeType !== "image/png") {
+        mimeType = "image/jpeg";
+      }
       var payload = {
-        requests: [{
-          image: { content: Utilities.base64Encode(blob.getBytes()) },
-          features: [{ type: "DOCUMENT_TEXT_DETECTION", maxResults: 1 }],
-          imageContext: { languageHints: ["th", "en"] },
+        model: "typhoon-ocr",
+        messages: [{
+          role: "user",
+          content: [
+            {
+              type: "text",
+              text: "Extract all text from this Thai bank transfer slip. Only return the clean Markdown. Do not include any explanation or extra text. Include all visible information on the slip.",
+            },
+            {
+              type: "image_url",
+              image_url: {
+                url: "data:" + mimeType + ";base64," + Utilities.base64Encode(blob.getBytes()),
+              },
+            },
+          ],
         }],
+        max_tokens: 4096,
+        repetition_penalty: 1.1,
+        temperature: 0.1,
+        top_p: 0.6,
       };
-      var response = UrlFetchApp.fetch("https://vision.googleapis.com/v1/images:annotate?key=" + encodeURIComponent(apiKey), {
+      var response = UrlFetchApp.fetch("https://api.opentyphoon.ai/v1/chat/completions", {
         method: "post",
         contentType: "application/json",
+        headers: { Authorization: "Bearer " + apiKey },
         payload: JSON.stringify(payload),
         muteHttpExceptions: true,
       });
       if (response.getResponseCode() !== 200) {
+        var errorBody = {};
+        try { errorBody = JSON.parse(response.getContentText()); } catch (ignore) {}
         return {
           success: false,
-          error: "OCR อ่านสลิปไม่สำเร็จ (HTTP " + response.getResponseCode() + ")",
+          error: (errorBody.error && errorBody.error.message) ||
+            "Typhoon OCR อ่านสลิปไม่สำเร็จ (HTTP " + response.getResponseCode() + ")",
         };
       }
       var data = JSON.parse(response.getContentText());
-      var item = data.responses && data.responses[0];
-      if (!item || item.error) {
-        return { success: false, error: (item && item.error && item.error.message) || "OCR ไม่สามารถอ่านข้อความจากสลิปได้" };
+      var content = data.choices && data.choices[0] && data.choices[0].message && data.choices[0].message.content;
+      if (!content) {
+        return { success: false, error: (data.error && data.error.message) || "Typhoon OCR ไม่สามารถอ่านข้อความจากสลิปได้" };
       }
-      var text = (item.fullTextAnnotation && item.fullTextAnnotation.text) ||
-        (item.textAnnotations && item.textAnnotations[0] && item.textAnnotations[0].description) || "";
+      var text = String(content || "").trim();
       text = String(text || "").trim();
       return text ? { success: true, text: text } : { success: false, error: "ไม่พบข้อความที่อ่านได้ในสลิป" };
     } catch (e) {
