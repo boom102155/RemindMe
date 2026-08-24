@@ -2109,7 +2109,7 @@ var LineService = (function () {
         state.step = "priority";
         setUserState(userId, state);
         return reply(
-          makeQuickReplyMessage("ระบุระดับความเร่งด่วน", [
+          makeQuickReplyMessage("ระบุระดับความสำคัญ", [
             { type: "message", label: "สูง", text: "สูง" },
             { type: "message", label: "กลาง", text: "กลาง" },
             { type: "message", label: "ต่ำ", text: "ต่ำ" },
