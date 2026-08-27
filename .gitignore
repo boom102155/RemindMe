@@ -1,0 +1,10 @@
+# clasp config (มี scriptId ของโปรเจกต์เรา — แต่ละคนสร้างของตัวเองด้วย clasp create/clone)
+.clasp.json
+
+# dependencies
+node_modules/
+
+# OS / editor junk
+Thumbs.db
+.DS_Store
+*.log
