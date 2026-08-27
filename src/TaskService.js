@@ -174,6 +174,16 @@ var TaskService = (function() {
     return new Date(parseInt(parts[0],10), parseInt(parts[1],10)-1, parseInt(parts[2],10));
   }
 
+  function buildDateTime(dateStr, timeStr) {
+    var d = parseDate(dateStr);
+    if (!d) return null;
+    var hm = String(timeStr || '00:00').split(':');
+    var h = parseInt(hm[0], 10) || 0;
+    var m = parseInt(hm[1], 10) || 0;
+    var dt = new Date(d.getFullYear(), d.getMonth(), d.getDate(), h, m, 0);
+    return isNaN(dt.getTime()) ? null : dt;
+  }
+
   function compareDate(a, b) {
     var da = parseDate(a.task_date);
     var db = parseDate(b.task_date);
@@ -321,6 +331,9 @@ var TaskService = (function() {
       var row = findRowIndex(sheet, id);
       if (row < 0) throw new Error('Task not found');
       var existing = rowToObject(sheet.getRange(row, 1, 1, headers.length).getValues()[0], headers);
+      var prevTaskDate = String(existing.task_date || '');
+      var prevDueTime = String(existing.due_time || '');
+      var wasReminderSent = existing.reminder_sent === true;
       for (var key in data) {
         if (data.hasOwnProperty(key) && EXPECTED_HEADERS.indexOf(key) >= 0) {
           existing[key] = data[key];
@@ -334,6 +347,19 @@ var TaskService = (function() {
         existing.notify_group = data.notify_group === true || String(data.notify_group).toUpperCase() === 'TRUE';
       }
       if (data.is_all_day !== undefined) existing.is_all_day = data.is_all_day === true || String(data.is_all_day).toUpperCase() === 'TRUE';
+
+      // ถ้ามีการแก้ไขวันที่/เวลาเริ่มภารกิจเป็นเวลาในอนาคต ให้รีเซ็ต reminder_sent กลับเป็น FALSE
+      // เพื่อให้ระบบส่งแจ้งเตือนอีกครั้งตามเวลาใหม่ (notify_group คงค่าเดิมไว้)
+      var dateChanged = data.task_date !== undefined && String(existing.task_date) !== prevTaskDate;
+      var timeChanged = data.due_time !== undefined && String(existing.due_time) !== prevDueTime;
+      if ((dateChanged || timeChanged) && String(existing.due_time || '').trim()) {
+        var newStart = buildDateTime(existing.task_date, existing.due_time);
+        if (newStart && newStart.getTime() > new Date().getTime()) {
+          existing.reminder_sent = false;
+          LogService.logEvent('TASK_REMINDER_RESET', id, 'Reset reminder_sent (rescheduled to future)', JSON.stringify({task_date: existing.task_date, due_time: existing.due_time, prev_task_date: prevTaskDate, prev_due_time: prevDueTime}));
+        }
+      }
+
       sheet.getRange(row, 1, 1, headers.length).setValues([objectToRow(existing, headers)]);
       LogService.logEvent('TASK_UPDATED', id, 'Updated task', JSON.stringify(data));
 
@@ -347,7 +373,8 @@ var TaskService = (function() {
       }
 
       // ส่งแจ้งเตือนการแก้ไขเฉพาะเมื่อมีการเปลี่ยนรายละเอียดงาน และเคยส่ง reminder แล้ว
-      if (hasNonStatusChange && (existing.reminder_sent === true || String(existing.reminder_sent).toUpperCase() === 'TRUE')) {
+      // (อ้างอิงสถานะก่อนแก้ไข เพราะการเลื่อนเวลาเป็นอนาคตจะรีเซ็ต reminder_sent แล้ว)
+      if (hasNonStatusChange && wasReminderSent) {
         try {
           var settings = SettingsService.getSettings();
           LineService.sendLineReminder(null, existing, settings.WEB_APP_URL || '', {isEdited: true});
