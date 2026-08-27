@@ -3,7 +3,7 @@ var LogService = (function() {
   var HEADERS = ['log_at','type','task_id','message','payload'];
 
   function getSheet() {
-    var ss = SpreadsheetApp.getActiveSpreadsheet();
+    var ss = SetupService.getSpreadsheet();
     var sheet = ss.getSheetByName(SHEET_NAME);
     if (!sheet) throw new Error('Sheet ' + SHEET_NAME + ' not found');
     return sheet;

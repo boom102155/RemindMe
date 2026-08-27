@@ -19,7 +19,7 @@ var DailyInfoService = (function() {
 
   return {
     render: function(dateStr) {
-      var ss = SpreadsheetApp.getActiveSpreadsheet();
+      var ss = SetupService.getSpreadsheet();
       var sheet = ss.getSheetByName(SHEET_NAME);
       if (!sheet) throw new Error('Sheet ' + SHEET_NAME + ' not found');
 

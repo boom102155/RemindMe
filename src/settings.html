@@ -35,17 +35,18 @@
     <div class="setup-step active" data-step="1">
       <div class="card">
         <h3>การตั้งค่าครั้งแรก</h3>
-        <p class="text-secondary mb">หากคุณเพิ่ง Copy ระบบนี้มา ให้ทำตามขั้นตอนด้านล่าง</p>
+        <p class="text-secondary mb">ระบบของคุณเชื่อมกับ Google Sheet ฐานข้อมูลส่วนตัวแล้ว หากเพิ่งติดตั้งระบบ ให้ทำตามขั้นตอนด้านล่าง</p>
         <ol class="setup-list">
-          <li>Deploy โปรเจกต์นี้เป็น Web App (ใช้ Execute as: Me, Access: Anyone)</li>
-          <li>กดปุ่ม “ตั้งค่าเริ่มต้นระบบ” เพื่อสร้าง Sheet และหมวดหมู่เริ่มต้น</li>
+          <li>ระบบสร้าง Google Sheet ฐานข้อมูลให้แล้วตอนติดตั้งครั้งแรก กดปุ่ม “เปิดฐานข้อมูล (Google Sheet)” เพื่อดูข้อมูลของคุณได้ทุกเมื่อ</li>
           <li>นำ Web App URL มาใส่ในขั้นตอน “เชื่อมต่อ LINE”</li>
           <li>ใส่ LINE Channel Access Token และ User ID </li>
           <li>นำ Url ของระบบมาใส่ในช่อง "ลิงก์ Dashboard (Web App URL)" ตั้งเวลาเริ่มต้น Trigger เป็น "ตรงเวลา" จากนั้นกด "เปิด Trigger" และกด "บันทึกการตั้งค่า LINE" และกด "ทดสอบ LINE" หากส่งสำเร็จจะมีข้อความแจ้งเตือนไปยัง Line Bot</li>
           <li>หากต้องการดึง Line Bot เข้ากลุ่มให้ไปตั้งค่าการอนุญาตใน Line Messaging API เมื่อดึงบอทเข้ากลุ่มระบบจะเพิ่มรายการกลุ่มอัตโนมัติ</li>
           <li>สามารถ เพิ่ม ลบ แก้ไข ข้อมูลหมวดหมู่ได้ในหน้านี้จากแถบ <b>หมวดหมู่</b> ด้านบน</li>
           <li>การทำ Rich Menu ใช้ขนาดของภาพตามที่ Line กำหนด (2500 x 1686 px) และนำภาพไปใส่ไว้ใน Drive จากนั้นนำ Id ของภาพมาใส่ในช่อง "Google Drive File ID รูป Rich Menu" ในแถบ <b>Rich Menu</b> ด้านบน จากนั้นกดปุ่ม "สร้างและตั้งค่า Rich Menu"</li>
+          <li>ปุ่ม “ตั้งค่าเริ่มต้นระบบ” ใช้สำหรับซ่อมแซม/ซิงก์ชีตและค่าเริ่มต้น หากมีการลบชีตหรือหมวดหมู่เริ่มต้นไป</li>
         </ol>
+        <button type="button" class="btn btn-secondary w-100 mt" onclick="openDatabase()">เปิดฐานข้อมูล (Google Sheet)</button>
         <button type="button" class="btn btn-primary w-100 mt" onclick="runSystemSetup()">ตั้งค่าเริ่มต้นระบบ</button>
       </div>
       <div class="setup-step-actions">

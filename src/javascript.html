@@ -1952,6 +1952,19 @@ function renderDashboard() {
     }
   }
 
+  async function openDatabase() {
+    try {
+      const st = await gsRun('getSetupStatus');
+      if (st && st.installed && st.spreadsheetUrl) {
+        window.open(st.spreadsheetUrl, '_blank');
+      } else {
+        showToast('ระบบยังไม่ได้ติดตั้ง', 'warning');
+      }
+    } catch (e) {
+      showToast('เปิดฐานข้อมูลไม่สำเร็จ: ' + e.message, 'error');
+    }
+  }
+
   async function createRichMenu() {
     const fileId = document.getElementById('rich-menu-file-id').value.trim();
     const warningEl = document.getElementById('rich-menu-warning');

@@ -3,7 +3,7 @@ var TaskService = (function() {
   var EXPECTED_HEADERS = ['task_id','task_name','category','task_date','due_time','remind_before_m','status','priority','note','reminder_sent','notify_group','notify_group_ids','is_all_day'];
 
   function getSheet() {
-    var ss = SpreadsheetApp.getActiveSpreadsheet();
+    var ss = SetupService.getSpreadsheet();
     var sheet = ss.getSheetByName(SHEET_NAME);
     if (!sheet) throw new Error('Sheet ' + SHEET_NAME + ' not found');
     return sheet;
@@ -38,7 +38,7 @@ var TaskService = (function() {
   }
 
   function normalizeTasksSheet(sheet) {
-    var ss = SpreadsheetApp.getActiveSpreadsheet();
+    var ss = SetupService.getSpreadsheet();
     var oldHeaders = getSheetHeaders(sheet);
     var oldData = sheet.getDataRange().getValues();
     var tempName = 'Tasks_New_' + Utilities.getUuid().slice(0, 8);

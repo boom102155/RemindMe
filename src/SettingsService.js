@@ -1,6 +1,6 @@
 var SettingsService = (function() {
   function getSheet(name) {
-    var ss = SpreadsheetApp.getActiveSpreadsheet();
+    var ss = SetupService.getSpreadsheet();
     var sheet = ss.getSheetByName(name);
     if (!sheet) throw new Error('Sheet ' + name + ' not found');
     return sheet;
@@ -217,7 +217,7 @@ var SettingsService = (function() {
     },
 
     clearAllData: function() {
-      var ss = SpreadsheetApp.getActiveSpreadsheet();
+      var ss = SetupService.getSpreadsheet();
       var names = ['Tasks', 'Finance', 'Categories', 'FinanceCategories', 'Users', 'Logs', 'LineGroups'];
       for (var i = 0; i < names.length; i++) {
         var sheet = ss.getSheetByName(names[i]);

@@ -3,7 +3,7 @@ var UserService = (function() {
   var HEADERS = ['line_user_id','display_name','last_message','created_at','updated_at'];
 
   function getSheet() {
-    var ss = SpreadsheetApp.getActiveSpreadsheet();
+    var ss = SetupService.getSpreadsheet();
     var sheet = ss.getSheetByName(SHEET_NAME);
     if (!sheet) throw new Error('Sheet ' + SHEET_NAME + ' not found');
     return sheet;

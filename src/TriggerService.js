@@ -62,6 +62,7 @@ var TriggerService = (function() {
     },
 
     checkAndSendReminders: function() {
+      if (!SetupService.isInstalled()) return;
       var settings = SettingsService.getSettings();
       var tz = settings.TIMEZONE || Session.getScriptTimeZone();
       var now = new Date();

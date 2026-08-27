@@ -1,0 +1,179 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+  <base target="_top">
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>ติดตั้งระบบ Remind Me</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: 'Segoe UI', Tahoma, sans-serif;
+      background: linear-gradient(135deg, #00403e 0%, #006664 100%);
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+    }
+    .card {
+      background: #ffffff;
+      border-radius: 16px;
+      box-shadow: 0 20px 60px rgba(0, 0, 0, 0.25);
+      max-width: 520px;
+      width: 100%;
+      padding: 40px 32px;
+      text-align: center;
+    }
+    .logo {
+      width: 72px;
+      height: 72px;
+      border-radius: 20px;
+      background: #006664;
+      color: #fff;
+      font-size: 36px;
+      line-height: 72px;
+      margin: 0 auto 16px;
+    }
+    h1 { font-size: 26px; color: #0f172a; margin-bottom: 8px; }
+    .subtitle { color: #64748b; font-size: 14px; line-height: 1.7; margin-bottom: 24px; }
+    .features {
+      text-align: left;
+      background: #f1f5f9;
+      border-radius: 12px;
+      padding: 16px 20px;
+      margin-bottom: 24px;
+      font-size: 13px;
+      color: #334155;
+      line-height: 1.9;
+    }
+    .btn {
+      display: inline-block;
+      width: 100%;
+      padding: 14px 24px;
+      border: none;
+      border-radius: 10px;
+      font-size: 16px;
+      font-weight: 600;
+      font-family: inherit;
+      cursor: pointer;
+      transition: all 0.2s;
+      text-decoration: none;
+    }
+    .btn-primary { background: #006664; color: #fff; }
+    .btn-primary:hover:not(:disabled) { background: #004f4e; transform: translateY(-1px); }
+    .btn-primary:disabled { opacity: 0.6; cursor: not-allowed; }
+    .btn-outline {
+      background: #fff;
+      color: #006664;
+      border: 2px solid #006664;
+      margin-top: 10px;
+    }
+    .btn-outline:hover { background: #f0fdfa; }
+    .note { margin-top: 20px; font-size: 12px; color: #94a3b8; line-height: 1.7; }
+    .success-icon {
+      width: 72px; height: 72px; border-radius: 50%;
+      background: #dcfce7; color: #16a34a;
+      font-size: 36px; line-height: 72px; margin: 0 auto 16px;
+    }
+    .error-box {
+      display: none;
+      background: #fef2f2; color: #b91c1c;
+      border-radius: 10px; padding: 12px 16px;
+      font-size: 13px; margin-bottom: 16px; text-align: left;
+      word-break: break-word;
+    }
+    .spinner {
+      display: inline-block;
+      width: 18px; height: 18px;
+      border: 3px solid rgba(255,255,255,0.4);
+      border-top-color: #fff;
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+      vertical-align: middle;
+      margin-right: 8px;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .hidden { display: none; }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <!-- สถานะ: ยังไม่ได้ติดตั้ง -->
+    <div id="view-install">
+      <div class="logo">⏰</div>
+      <h1>Remind Me</h1>
+      <p class="subtitle">
+        ระบบจัดการภารกิจ รายรับ-รายจ่าย<br>และการแจ้งเตือนผ่าน LINE Bot
+      </p>
+      <div class="features">
+        ✅ ระบบจะสร้าง <b>Google Sheet ใหม่</b> ใน Drive ของคุณ<br>
+        ✅ สร้างชีตและค่าเริ่มต้นทั้งหมดอัตโนมัติ<br>
+        ✅ ข้อมูลทั้งหมดเป็นของคุณ ไม่มีข้อมูลของใครติดมา<br>
+        ✅ ไม่ต้องแก้ไข Spreadsheet ID ในโค้ด
+      </div>
+      <div class="error-box" id="error-box"></div>
+      <button type="button" class="btn btn-primary" id="btn-install" onclick="runInstall()">
+        ติดตั้งระบบครั้งแรก
+      </button>
+      <p class="note">
+        การติดตั้งจะสร้าง Spreadsheet ชื่อ "Remind Me"<br>
+        และบันทึก Spreadsheet ID ไว้ใน Script Properties โดยอัตโนมัติ
+      </p>
+    </div>
+
+    <!-- สถานะ: ติดตั้งสำเร็จ -->
+    <div id="view-success" class="hidden">
+      <div class="success-icon">✓</div>
+      <h1>ติดตั้งระบบเรียบร้อยแล้ว</h1>
+      <p class="subtitle" id="success-message">
+        ระบบสร้าง Google Sheet ฐานข้อมูลของคุณเรียบร้อยแล้ว<br>
+        ตอนนี้คุณสามารถเริ่มใช้งาน Remind Me ได้ทันที
+      </p>
+      <button type="button" class="btn btn-primary" onclick="window.top.location.reload()">
+        เข้าสู่ระบบ Remind Me
+      </button>
+      <a class="btn btn-outline" id="link-spreadsheet" href="#" target="_blank" rel="noopener">
+        เปิดฐานข้อมูล (Google Sheet)
+      </a>
+      <p class="note">
+        ขั้นตอนต่อไป: ไปที่หน้า "ตั้งค่า" เพื่อเชื่อมต่อ LINE Bot<br>
+        (ใส่ Channel Access Token, User ID และลิงก์ Dashboard)
+      </p>
+    </div>
+  </div>
+
+  <script>
+    function runInstall() {
+      var btn = document.getElementById('btn-install');
+      var errBox = document.getElementById('error-box');
+      errBox.style.display = 'none';
+      btn.disabled = true;
+      btn.innerHTML = '<span class="spinner"></span>กำลังติดตั้งระบบ...';
+
+      google.script.run
+        .withSuccessHandler(function(res) {
+          var link = document.getElementById('link-spreadsheet');
+          if (res && res.spreadsheetUrl) {
+            link.href = res.spreadsheetUrl;
+          } else {
+            link.classList.add('hidden');
+          }
+          if (res && res.alreadyInstalled) {
+            document.getElementById('success-message').innerHTML =
+              'ระบบนี้ถูกติดตั้งไว้เรียบร้อยแล้ว<br>คุณสามารถเข้าใช้งานได้ทันที';
+          }
+          document.getElementById('view-install').classList.add('hidden');
+          document.getElementById('view-success').classList.remove('hidden');
+        })
+        .withFailureHandler(function(err) {
+          errBox.textContent = 'ติดตั้งไม่สำเร็จ: ' + (err && err.message ? err.message : err);
+          errBox.style.display = 'block';
+          btn.disabled = false;
+          btn.textContent = 'ลองติดตั้งอีกครั้ง';
+        })
+        .setupSystem();
+    }
+  </script>
+</body>
+</html>

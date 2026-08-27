@@ -3,7 +3,7 @@ var FinanceService = (function() {
   var HEADERS = ['transaction_id','type','title','amount','category','date','note','created_at','scope'];
 
   function getSheet() {
-    var ss = SpreadsheetApp.getActiveSpreadsheet();
+    var ss = SetupService.getSpreadsheet();
     var sheet = ss.getSheetByName(SHEET_NAME);
     if (!sheet) throw new Error('Sheet ' + SHEET_NAME + ' not found');
     return sheet;

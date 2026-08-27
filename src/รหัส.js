@@ -1,4 +1,12 @@
 function doGet(e) {
+  // Standalone mode: หากยังไม่ได้ติดตั้ง ให้แสดงหน้าติดตั้งระบบครั้งแรก
+  if (!SetupService.isInstalled()) {
+    return HtmlService.createTemplateFromFile('Install')
+      .evaluate()
+      .setTitle('ติดตั้งระบบ Remind Me')
+      .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.DEFAULT)
+      .addMetaTag('viewport', 'width=device-width, initial-scale=1');
+  }
   initializeSheets();
   if (e.parameter && e.parameter.view === 'calendar') {
     var vcTemplate = HtmlService.createTemplateFromFile('ViewCalendar');
@@ -37,20 +45,8 @@ function include(filename) {
 }
 
 function initializeSheets() {
-  var ss = SpreadsheetApp.getActiveSpreadsheet();
-
-  var required = {
-    'Tasks': ['task_id','task_name','category','task_date','due_time','remind_before_m','status','priority','note','reminder_sent','notify_group','notify_group_ids','is_all_day'],
-    'Categories': ['name','color','created_at'],
-    'Settings': ['setting_key','setting_value','description'],
-    'Users': ['line_user_id','display_name','last_message','created_at','updated_at'],
-    'Logs': ['log_at','type','task_id','message','payload'],
-    'Finance': ['transaction_id','type','title','amount','category','date','note','created_at','scope'],
-    'FinanceCategories': ['name','type','icon','color','created_at'],
-    'LineGroups': ['group_id','name','created_at'],
-    'ข้อมูลรายวัน': [],
-    'README': []
-  };
+  var ss = SetupService.getSpreadsheet();
+  var required = SetupService.REQUIRED_SHEETS;
 
   for (var name in required) {
     if (!required.hasOwnProperty(name)) continue;
@@ -97,47 +93,24 @@ function initializeSheets() {
   seedDefaults();
 }
 
-function onOpen() {
-  SpreadsheetApp.getUi()
-    .createMenu('Remind Me')
-    .addItem('เปิด Dashboard', 'openDashboardDialog')
-    .addItem('ตั้งค่าเริ่มต้นระบบ', 'runSetup')
-    .addItem('อัปเดตคู่มือ README', 'updateReadmeSheet')
-    .addToUi();
-}
-
-function openDashboardDialog() {
-  var settings = SettingsService.getSettings();
-  var url = settings.WEB_APP_URL || '';
-  var html;
-  if (!url) {
-    html = '<p style="font-family:sans-serif;text-align:center">ยังไม่ได้ตั้งค่า Web App URL<br>กรุณา Deploy โปรเจกต์นี้เป็น Web App ก่อน แล้วใส่ URL ในหน้า Settings</p>';
-  } else {
-    html = '<p style="font-family:sans-serif;text-align:center"><a href="' + url + '" target="_blank" style="font-size:18px">คลิกที่นี่เพื่อเปิด Dashboard</a></p>';
-  }
-  SpreadsheetApp.getUi().showModalDialog(
-    HtmlService.createHtmlOutput(html).setWidth(360).setHeight(120),
-    'Remind Me Dashboard'
-  );
-}
-
+/**
+ * ซ่อมแซม/ซิงก์ค่าเริ่มต้นของระบบที่ติดตั้งแล้ว
+ * (เรียกจากปุ่ม "ตั้งค่าเริ่มต้นระบบ" ในหน้าตั้งค่าของ Web App)
+ */
 function runSetup() {
+  if (!SetupService.isInstalled()) {
+    return SetupService.setup();
+  }
   initializeSheets();
   seedDefaults();
   seedReadmeSheet();
   SettingsService.saveSetting('TIMEZONE', 'Asia/Bangkok');
   SettingsService.saveSetting('DEFAULT_REMIND_MINUTES', '15');
-  return {success: true, message: 'ตั้งค่าเริ่มต้นเสร็จสิ้น กรุณา Deploy Web App แล้วใส่ URL ในหน้า Settings'};
-}
-
-function updateReadmeSheet() {
-  initializeSheets();
-  seedReadmeSheet();
-  SpreadsheetApp.getUi().alert('อัปเดตคู่มือ README เรียบร้อยแล้ว');
+  return {success: true, message: 'ตั้งค่าเริ่มต้นเสร็จสิ้น'};
 }
 
 function seedReadmeSheet() {
-  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var ss = SetupService.getSpreadsheet();
   var sheet = ss.getSheetByName('README');
   if (!sheet) {
     sheet = ss.insertSheet('README');
@@ -149,22 +122,22 @@ function seedReadmeSheet() {
     [''],
     ['1. แนะนำระบบ'],
     ['Remind Me คือระบบจัดการภารกิจ รายรับ-รายจ่าย และการแจ้งเตือนผ่าน LINE Bot บน Google Sheets'],
-    ['หลังจาก Make a copy แล้ว ให้ทำตามขั้นตอนด้านล่าง'],
+    ['ระบบนี้เป็น Standalone Apps Script แยกส่วนโค้ดออกจากฐานข้อมูลอย่างชัดเจน'],
+    ['การคัดลอกโปรเจกต์จะได้เฉพาะโค้ด ไม่มีข้อมูลของใครติดไปด้วย'],
     [''],
-    ['2. ขั้นตอนหลัง Make a copy'],
-    ['2.1 เปิด Google Sheet สำเนาที่คุณสร้างขึ้น'],
-    ['2.2 รอสักครู่ให้เมนู Remind Me ปรากฏ (หรือรีเฟรชหน้า)'],
-    ['2.3 คลิกเมนู Remind Me → ตั้งค่าเริ่มต้นระบบ'],
-    ['2.4 คลิกเมนู Extensions → Apps Script'],
-    ['2.5 ใน Apps Script คลิกปุ่ม Deploy (รูปจรวด) → New deployment'],
-    ['2.6 เลือก Type: Web app'],
-    ['2.7 ตั้งค่า:'],
+    ['2. การติดตั้งระบบครั้งแรก'],
+    ['2.1 ใน Apps Script คลิกปุ่ม Deploy (รูปจรวด) → New deployment'],
+    ['2.2 เลือก Type: Web app'],
+    ['2.3 ตั้งค่า:'],
     ['   - Description: Remind Me Web App'],
     ['   - Execute as: Me'],
     ['   - Who has access: Anyone'],
-    ['2.8 คลิก Deploy แล้วคัดลอก Web App URL'],
-    ['2.9 เปิด Web App URL ในเบราว์เซอร์'],
-    ['2.10 ไปที่หน้า ตั้งค่า แล้วใส่ Web App URL ในช่อง "ลิงก์ Dashboard"'],
+    ['2.4 คลิก Deploy แล้วคัดลอก Web App URL'],
+    ['2.5 เปิด Web App URL ในเบราว์เซอร์ ระบบจะพาไปหน้าติดตั้งอัตโนมัติ'],
+    ['2.6 กดปุ่ม "ติดตั้งระบบครั้งแรก"'],
+    ['2.7 ระบบจะสร้าง Google Sheet ชื่อ "Remind Me" ใน Drive ของคุณ พร้อมชีตและค่าเริ่มต้นทั้งหมด'],
+    ['2.8 Spreadsheet ID จะถูกเก็บใน Script Properties อัตโนมัติ ไม่ต้องแก้ไขโค้ด'],
+    ['2.9 รีโหลด Web App แล้วไปที่หน้า ตั้งค่า เพื่อใส่ Web App URL ในช่อง "ลิงก์ Dashboard"'],
     [''],
     ['3. วิธีสร้าง LINE Official Account (OA)'],
     ['3.1 เปิด https://manager.line.biz/'],
@@ -231,7 +204,12 @@ function seedReadmeSheet() {
     ['- รูปสลิปจะถูกส่งไปประมวลผลกับ Typhoon OCR ส่วนข้อความเสียงจะถูกส่งไปถอดเสียงกับ Groq Whisper ระบบจะไม่เก็บไฟล์สื่อหรือข้อความที่อ่าน/ถอดเสียงดิบ'],
     ['- หาก redeploy Web App URL จะเปลี่ยน ต้องเอา URL ใหม่มาใส่ในหน้าตั้งค่าใหม่'],
     ['- ระบบใช้ timezone Asia/Bangkok เป็นค่าเริ่มต้น'],
-    ['- ข้อมูลทั้งหมดจะถูกเก็บใน Google Sheet นี้']
+    ['- ข้อมูลทั้งหมดจะถูกเก็บใน Google Sheet ที่ระบบสร้างให้ใน Drive ของคุณเท่านั้น'],
+    [''],
+    ['11. การอัปเดตระบบ'],
+    ['เมื่อมีการอัปเดต Source Code ให้ pull เวอร์ชันล่าสุดแล้ว push ขึ้น Apps Script ของคุณ'],
+    ['ฐานข้อมูล Google Sheet เดิมของคุณจะยังถูกใช้งานต่อไป เพราะระบบอ้างอิงผ่าน Script Properties'],
+    ['ไม่ต้องแก้ไข Spreadsheet ID ใหม่ทุกครั้งที่อัปเดต']
   ];
 
   var range = sheet.getRange(1, 1, rows.length, 1);
@@ -246,7 +224,7 @@ function seedDefaults() {
   if (settings.DEFAULTS_SEEDED === 'TRUE') return;
 
   // Categories
-  var catSheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('Categories');
+  var catSheet = SetupService.getSpreadsheet().getSheetByName('Categories');
   if (catSheet.getLastRow() <= 1) {
     var now = nowString();
     var defaults = [
@@ -259,7 +237,7 @@ function seedDefaults() {
   }
 
   // Settings
-  var settingsSheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('Settings');
+  var settingsSheet = SetupService.getSpreadsheet().getSheetByName('Settings');
   var existing = {};
   if (settingsSheet.getLastRow() > 1) {
     var values = settingsSheet.getRange(2, 1, settingsSheet.getLastRow() - 1, 1).getValues() || [];
@@ -284,7 +262,7 @@ function seedDefaults() {
   });
 
   // FinanceCategories
-  var finCatSheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('FinanceCategories');
+  var finCatSheet = SetupService.getSpreadsheet().getSheetByName('FinanceCategories');
   if (finCatSheet.getLastRow() <= 1) {
     var now = nowString();
     var finDefaults = [
@@ -511,7 +489,24 @@ function runReminderCheckNow() {
 /* ---------- Daily Report ---------- */
 function renderDailyInfoSheet(date) { return DailyInfoService.render(date); }
 
+/* ---------- Setup API (First-time Setup) ---------- */
+function setupSystem() { return SetupService.setup(); }
+function getSetupStatus() { return SetupService.getStatus(); }
+
+/**
+ * สำหรับนักพัฒนา: รันฟังก์ชันนี้จาก Apps Script Editor หนึ่งครั้ง
+ * เพื่อชี้ระบบไปยัง Spreadsheet เดิม (กรณี push ทับโปรเจกต์ container-bound เดิม)
+ * วิธีใช้: linkExistingSpreadsheet('ใส่_SPREADSHEET_ID_ตรงนี้') แล้วกด Run
+ */
+function linkExistingSpreadsheet(spreadsheetId) { return SetupService.linkExistingSpreadsheet(spreadsheetId); }
+
 /* ---------- Webhook for LINE ---------- */
 function doPost(e) {
+  // Standalone mode: หากยังไม่ได้ติดตั้ง ให้ตอบกลับ LINE ด้วยสถานะปกติเพื่อไม่ให้ webhook error
+  if (!SetupService.isInstalled()) {
+    return ContentService.createTextOutput(
+      JSON.stringify({ status: 'not_installed' })
+    ).setMimeType(ContentService.MimeType.JSON);
+  }
   return LineService.doPost(e);
 }
