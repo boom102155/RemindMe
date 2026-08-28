@@ -1,8 +1,13 @@
 function doGet(e) {
   // Standalone mode: หากยังไม่ได้ติดตั้ง ให้แสดงหน้าติดตั้งระบบครั้งแรก
   if (!SetupService.isInstalled()) {
-    return HtmlService.createTemplateFromFile('Install')
-      .evaluate()
+    var installTemplate = HtmlService.createTemplateFromFile('Install');
+    try {
+      installTemplate.webAppUrl = ScriptApp.getService().getUrl();
+    } catch (err) {
+      installTemplate.webAppUrl = '';
+    }
+    return installTemplate.evaluate()
       .setTitle('ติดตั้งระบบ Remind Me')
       .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.DEFAULT)
       .addMetaTag('viewport', 'width=device-width, initial-scale=1');
