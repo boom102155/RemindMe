@@ -1300,45 +1300,27 @@ var LineService = (function () {
     } else if (mode === "created") {
       footer = {
         type: "box",
-        layout: "vertical",
-        spacing: "sm",
+        layout: "horizontal",
+        spacing: "md",
         paddingAll: "lg",
         contents: [
           {
-            type: "box",
-            layout: "horizontal",
-            spacing: "md",
-            contents: [
-              {
-                type: "button",
-                style: "secondary",
-                height: "sm",
-                flex: 1,
-                action: { type: "uri", label: "✏️ แก้ไข", uri: editUrl },
-              },
-              {
-                type: "button",
-                style: "primary",
-                height: "sm",
-                color: "#EF4444",
-                flex: 1,
-                action: {
-                  type: "postback",
-                  label: "🗑️ ลบ",
-                  data: "action=deleteTask&task_id=" + task.task_id,
-                },
-              },
-            ],
+            type: "button",
+            style: "secondary",
+            height: "sm",
+            flex: 1,
+            action: { type: "uri", label: "✏️ แก้ไข", uri: editUrl },
           },
           {
             type: "button",
             style: "primary",
             height: "sm",
-            color: "#10B981",
+            color: "#EF4444",
+            flex: 1,
             action: {
               type: "postback",
-              label: "✅ ทำเสร็จแล้ว",
-              data: "action=completeTask&task_id=" + task.task_id,
+              label: "🗑️ ลบ",
+              data: "action=deleteTask&task_id=" + task.task_id,
             },
           },
         ],
@@ -2680,6 +2662,17 @@ var LineService = (function () {
               type: "uri",
               label: "เปิด Dashboard",
               uri: dashboardUrl,
+            },
+          });
+          footerContents.push({
+            type: "button",
+            style: "primary",
+            height: "sm",
+            color: "#006664",
+            action: {
+              type: "postback",
+              label: "✅ ทำเสร็จแล้ว",
+              data: "action=completeTask&task_id=" + task.task_id,
             },
           });
         }
