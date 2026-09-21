@@ -43,6 +43,30 @@ var FinanceService = (function() {
     return HEADERS.map(function(h) { return obj[h] !== undefined ? obj[h] : ''; });
   }
 
+  function validateFinanceData(data, partial) {
+    data = data || {};
+    if (!partial || data.title !== undefined) {
+      if (!String(data.title || '').trim()) throw new Error('Title is required');
+      if (String(data.title).length > 500) throw new Error('Title is too long');
+    }
+    if (!partial || data.date !== undefined) {
+      if (!isValidDate(String(data.date || ''))) throw new Error('Date is invalid');
+    }
+    if (data.amount !== undefined) {
+      var amount = Number(data.amount);
+      if (!isFinite(amount) || amount < 0 || amount > 1000000000000) throw new Error('Amount is invalid');
+    }
+    if (data.type !== undefined && ['รายรับ', 'รายจ่าย'].indexOf(data.type) < 0) throw new Error('Finance type is invalid');
+    if (data.scope !== undefined && ['ส่วนตัว', 'ที่ทำงาน'].indexOf(data.scope) < 0) throw new Error('Finance scope is invalid');
+  }
+
+  function isValidDate(value) {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
+    var parts = value.split('-').map(function(part) { return parseInt(part, 10); });
+    var d = new Date(parts[0], parts[1] - 1, parts[2]);
+    return d.getFullYear() === parts[0] && d.getMonth() === parts[1] - 1 && d.getDate() === parts[2];
+  }
+
   function findRowIndex(sheet, id) {
     var data = sheet.getDataRange().getValues() || [];
     for (var i = 0; i < data.length; i++) {
@@ -118,8 +142,7 @@ var FinanceService = (function() {
     },
 
     addFinanceRecord: function(data) {
-      if (!data.title) throw new Error('Title is required');
-      if (!data.date) throw new Error('Date is required');
+      validateFinanceData(data, false);
       var sheet = getSheet();
       var record = {
         transaction_id: Utilities.getUuid(),
@@ -138,6 +161,7 @@ var FinanceService = (function() {
     },
 
     updateFinanceRecord: function(id, data) {
+      validateFinanceData(data, true);
       var sheet = getSheet();
       var row = findRowIndex(sheet, id);
       if (row < 0) throw new Error('Finance record not found');

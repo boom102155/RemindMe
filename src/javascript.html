@@ -28,7 +28,12 @@
       if (Array.isArray(cached.categories)) state.categories = cached.categories;
       if (Array.isArray(cached.financeCategories)) state.financeCategories = cached.financeCategories;
       if (Array.isArray(cached.lineGroups)) state.lineGroups = cached.lineGroups;
-      if (cached.settings && typeof cached.settings === 'object') state.settings = cached.settings;
+      if (cached.settings && typeof cached.settings === 'object') {
+        state.settings = cached.settings;
+        delete state.settings.LINE_CHANNEL_ACCESS_TOKEN;
+        delete state.settings.TYPHOON_OCR_API_KEY;
+        delete state.settings.GROQ_ASR_API_KEY;
+      }
       if (cached.financeSummary && typeof cached.financeSummary === 'object') state.financeSummary = cached.financeSummary;
       if (Array.isArray(cached.todayFinanceRecords)) state.todayFinanceRecords = cached.todayFinanceRecords;
       if (Array.isArray(cached.financeRecords)) state.financeRecords = cached.financeRecords;
@@ -433,7 +438,11 @@
   }
 
   function updateSettingsUI() {
-    document.getElementById('line-token').value = state.settings.LINE_CHANNEL_ACCESS_TOKEN || '';
+    const tokenInput = document.getElementById('line-token');
+    tokenInput.value = '';
+    tokenInput.placeholder = state.settings.LINE_CONFIGURED
+      ? 'ตั้งค่าแล้ว (เว้นว่างเพื่อคงค่าเดิม)'
+      : 'ใส่ Channel Access Token';
     document.getElementById('line-user-id').value = state.settings.LINE_DEFAULT_USER_ID || '';
     document.getElementById('web-app-url').value = state.settings.WEB_APP_URL || '';
     document.getElementById('default-reminder').value = state.settings.DEFAULT_REMIND_MINUTES || '15';

@@ -43,6 +43,19 @@ var SettingsService = (function() {
       return settings;
     },
 
+    // Only expose non-secret settings to the browser.
+    getPublicSettings: function() {
+      var settings = this.getSettings();
+      var lineConfigured = !!settings.LINE_CHANNEL_ACCESS_TOKEN;
+      delete settings.LINE_CHANNEL_ACCESS_TOKEN;
+      delete settings.TYPHOON_OCR_API_KEY;
+      delete settings.GROQ_ASR_API_KEY;
+      settings.LINE_CONFIGURED = lineConfigured;
+      settings.TYPHOON_OCR_CONFIGURED = !!PropertiesService.getScriptProperties().getProperty('TYPHOON_OCR_API_KEY');
+      settings.GROQ_ASR_CONFIGURED = !!PropertiesService.getScriptProperties().getProperty('GROQ_ASR_API_KEY');
+      return settings;
+    },
+
     getSetting: function(key) {
       var sheet = getSheet('Settings');
       var row = findRow(sheet, 1, key, 'setting_key');
@@ -232,4 +245,5 @@ var SettingsService = (function() {
       return {success: true};
     }
   };
+
 })();

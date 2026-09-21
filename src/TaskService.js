@@ -159,6 +159,48 @@ var TaskService = (function() {
     return headers.map(function(h) { return obj[h] !== undefined ? obj[h] : ''; });
   }
 
+  function validateTaskData(data, partial) {
+    data = data || {};
+    if (!partial || data.task_name !== undefined) {
+      if (!String(data.task_name || '').trim()) throw new Error('Task name is required');
+      if (String(data.task_name).length > 500) throw new Error('Task name is too long');
+    }
+    if (!partial || data.task_date !== undefined) {
+      if (!isValidDate(String(data.task_date || ''))) {
+        throw new Error('Task date is invalid');
+      }
+    }
+    if (data.due_time !== undefined && normalizeTaskTime(data.due_time) === null) {
+      throw new Error('Task time is invalid');
+    }
+    if (data.remind_before_m !== undefined) {
+      var minutes = Number(data.remind_before_m);
+      if (!isFinite(minutes) || minutes < 0 || minutes > 10080 || Math.floor(minutes) !== minutes) {
+        throw new Error('Reminder time is invalid');
+      }
+    }
+    if (data.status !== undefined && ['Pending', 'In Progress', 'Done'].indexOf(data.status) < 0) {
+      throw new Error('Task status is invalid');
+    }
+    if (data.priority !== undefined && ['Low', 'Medium', 'High'].indexOf(data.priority) < 0) {
+      throw new Error('Task priority is invalid');
+    }
+  }
+
+  function isValidDate(value) {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
+    var parts = value.split('-').map(function(part) { return parseInt(part, 10); });
+    var d = new Date(parts[0], parts[1] - 1, parts[2]);
+    return d.getFullYear() === parts[0] && d.getMonth() === parts[1] - 1 && d.getDate() === parts[2];
+  }
+
+  function normalizeTaskTime(value) {
+    if (value === undefined || value === null || String(value).trim() === '') return '';
+    var match = String(value).trim().replace(/\./g, ':').match(/^([01]?\d|2[0-3]):([0-5]\d)$/);
+    if (!match) return null;
+    return (parseInt(match[1], 10) < 10 ? '0' : '') + parseInt(match[1], 10) + ':' + match[2];
+  }
+
   function findRowIndex(sheet, id) {
     var data = sheet.getDataRange().getValues() || [];
     for (var i = 0; i < data.length; i++) {
@@ -288,8 +330,7 @@ var TaskService = (function() {
     addTask: function(data, options) {
       options = options || {};
       var skipNotify = options.skipNotify === true;
-      if (!data.task_name) throw new Error('Task name is required');
-      if (!data.task_date) throw new Error('Task date is required');
+      validateTaskData(data, false);
       var sheet = getSheet();
       var headers = ensureHeaders(sheet);
       sheet = getSheet();
@@ -298,7 +339,7 @@ var TaskService = (function() {
         task_name: data.task_name,
         category: data.category || 'Work',
         task_date: data.task_date,
-        due_time: data.due_time || '',
+        due_time: normalizeTaskTime(data.due_time),
         remind_before_m: parseInt(data.remind_before_m, 10) >= 0 ? parseInt(data.remind_before_m, 10) : getDefaultReminderMinutes(),
         status: data.status || 'Pending',
         priority: data.priority || 'Medium',
@@ -325,6 +366,7 @@ var TaskService = (function() {
     },
 
     updateTask: function(id, data) {
+      validateTaskData(data, true);
       var sheet = getSheet();
       var headers = ensureHeaders(sheet);
       sheet = getSheet();
@@ -339,6 +381,7 @@ var TaskService = (function() {
           existing[key] = data[key];
         }
       }
+      if (data.due_time !== undefined) existing.due_time = normalizeTaskTime(data.due_time);
       if (data.remind_before_m !== undefined) existing.remind_before_m = parseInt(data.remind_before_m, 10) || 0;
       if (data.notify_group_ids !== undefined) {
         existing.notify_group_ids = String(data.notify_group_ids || '').trim();

@@ -806,6 +806,14 @@ var LineService = (function () {
     return records.length > 0 ? records : null;
   }
 
+  function isDirectTaskName(text) {
+    var value = String(text || '').trim();
+    if (!value || value.length < 2) return false;
+    if (/^(สวัสดี|help|ช่วยเหลือ|จดค่าใช้จ่าย|จดรายรับรายจ่าย|จดรายรับ-รายจ่าย|\?|ยกเลิก|ข้าม|บันทึก|ส่วนตัว|ที่ทำงาน)$/i.test(value)) return false;
+    if (/^(จดภารกิจ|เพิ่มภารกิจ|สร้างภารกิจ)$/i.test(value)) return false;
+    return true;
+  }
+
   function getWebAppUrl(settings) {
     return settings.WEB_APP_URL || DEFAULT_WEB_APP_URL;
   }
@@ -945,7 +953,8 @@ var LineService = (function () {
   function normalizeTime(str) {
     if (!str || str === "-" || str === "ไม่ระบุ") return "";
     var s = String(str).trim().replace(/\./g, ":");
-    if (/^([01]?\d|2[0-3]):([0-5]\d)$/.test(s)) return s;
+    var match = s.match(/^([01]?\d|2[0-3]):([0-5]\d)$/);
+    if (match) return (parseInt(match[1], 10) < 10 ? "0" : "") + parseInt(match[1], 10) + ":" + match[2];
     return null;
   }
 
@@ -2076,8 +2085,12 @@ var LineService = (function () {
           "ระบุเวลาเริ่ม ตัวอย่าง 14.00 หากเป็นภารกิจทั้งวัน ให้กดด้านล่างได้เลยค่ะ",
           [
             { type: "message", label: "09.00", text: "09.00" },
+            { type: "message", label: "10.00", text: "10.00" },
+            { type: "message", label: "11.00", text: "11.00" },
             { type: "message", label: "13.00", text: "13.00" },
-            { type: "message", label: "17.00", text: "17.00" },
+            { type: "message", label: "14.00", text: "14.00" },
+            { type: "message", label: "15.00", text: "15.00" },
+            { type: "message", label: "16.00", text: "16.00" },
             { type: "message", label: "ทั้งวัน", text: "ทั้งวัน" },
           ],
         ),
@@ -2112,8 +2125,11 @@ var LineService = (function () {
           "ระบุเวลาเสร็จ ตัวอย่าง 16.00 หากไม่ระบุกด ไม่ระบุ ได้เลย",
           [
             { type: "message", label: "10.00", text: "10.00" },
+            { type: "message", label: "11.00", text: "11.00" },
+            { type: "message", label: "13.00", text: "13.00" },
             { type: "message", label: "14.00", text: "14.00" },
-            { type: "message", label: "18.00", text: "18.00" },
+            { type: "message", label: "15.00", text: "15.00" },
+            { type: "message", label: "16.00", text: "16.00" },
             { type: "message", label: "ไม่ระบุ", text: "ไม่ระบุ" },
           ],
         ),
@@ -2498,8 +2514,11 @@ var LineService = (function () {
 
   return {
     saveLineSetup: function (token, userId) {
-      SettingsService.saveSetting("LINE_CHANNEL_ACCESS_TOKEN", token || "");
-      SettingsService.saveSetting("LINE_DEFAULT_USER_ID", userId || "");
+      // A blank token from the settings page means keep the existing secret.
+      if (String(token || '').trim()) {
+        SettingsService.saveSetting("LINE_CHANNEL_ACCESS_TOKEN", String(token).trim());
+      }
+      SettingsService.saveSetting("LINE_DEFAULT_USER_ID", String(userId || '').trim());
       return { success: true };
     },
 
@@ -2577,6 +2596,21 @@ var LineService = (function () {
       } catch (e) {
         return { success: false, error: e.message, payload: messages };
       }
+    },
+
+    replyMessageWithPushFallback: function (replyToken, userId, messages, context) {
+      var replyResult = this.replyMessage(replyToken, messages);
+      if (replyResult.success || !userId) return replyResult;
+
+      // Reply tokens can expire while OCR/Sheet work is in progress. Push the same
+      // response to the private chat so the user does not have to repeat the input.
+      var pushResult = this.pushMessage(userId, messages);
+      LogService.logEvent('LINE_REPLY_FALLBACK', userId, context || 'reply_failed', JSON.stringify({
+        reply_error: replyResult.error,
+        push_success: pushResult.success,
+        push_error: pushResult.error || ''
+      }));
+      return replyResult;
     },
 
     sendFinanceReply: function (replyToken, mode, record, webAppUrl) {
@@ -2832,6 +2866,7 @@ var LineService = (function () {
 
         for (var i = 0; i < events.length; i++) {
           var ev = events[i];
+          if (claimWebhookEvent(ev)) continue;
           var source = ev.source || {};
           var sourceType = source.type || "";
           var userId = source.userId || "";
@@ -2904,7 +2939,12 @@ var LineService = (function () {
           if (ev.type === "postback" && ev.replyToken) {
             var pbMessages = handlePostback(ev, settings, webAppUrl);
             if (pbMessages && pbMessages.length > 0) {
-              var pbReplyRes = this.replyMessage(ev.replyToken, pbMessages);
+              var pbReplyRes = this.replyMessageWithPushFallback(
+                ev.replyToken,
+                uid,
+                pbMessages,
+                'postback_reply',
+              );
               if (!pbReplyRes.success) {
                 LogService.logEvent(
                   "LINE_PUSH_ERROR",
@@ -2934,7 +2974,12 @@ var LineService = (function () {
                 todayStr,
               );
               if (finFlowMessages && finFlowMessages.length > 0) {
-                var finFlowReplyRes = this.replyMessage(ev.replyToken, finFlowMessages);
+                var finFlowReplyRes = this.replyMessageWithPushFallback(
+                  ev.replyToken,
+                  uid,
+                  finFlowMessages,
+                  'finance_flow_reply',
+                );
                 if (!finFlowReplyRes.success) {
                   LogService.logEvent(
                     "LINE_PUSH_ERROR",
@@ -2962,7 +3007,12 @@ var LineService = (function () {
               webAppUrl,
             );
             if (flowMessages && flowMessages.length > 0) {
-              var flowReplyRes = this.replyMessage(ev.replyToken, flowMessages);
+               var flowReplyRes = this.replyMessageWithPushFallback(
+                 ev.replyToken,
+                 uid,
+                 flowMessages,
+                 'task_flow_reply',
+               );
               if (!flowReplyRes.success) {
                 LogService.logEvent(
                   "LINE_PUSH_ERROR",
@@ -3067,6 +3117,45 @@ var LineService = (function () {
                   scopeReplyRes.error,
                   JSON.stringify({ type: "finance_scope_ask" }),
                 );
+              }
+            } else if (/^(จดภารกิจ|เพิ่มภารกิจ|สร้างภารกิจ)$/.test(messageText.trim())) {
+              maybeShowLoading(sourceType, userId, "start_task_text");
+              clearUserState(uid);
+               var taskPromptRes = this.replyMessageWithPushFallback(
+                 ev.replyToken,
+                 uid,
+                 [startTaskFlow(ev.replyToken, uid)],
+                 'start_task_text',
+               );
+              if (!taskPromptRes.success) {
+                LogService.logEvent("LINE_PUSH_ERROR", uid, taskPromptRes.error, JSON.stringify({ type: "start_task_text" }));
+              }
+            } else if (isDirectTaskName(messageText)) {
+              maybeShowLoading(sourceType, userId, "direct_task_start");
+              clearUserState(uid);
+              setUserState(uid, { step: "name", data: {} });
+              var taskStartMessages = handleTaskFlow(
+                ev.replyToken,
+                uid,
+                messageText,
+                settings,
+                webAppUrl,
+              );
+              if (taskStartMessages && taskStartMessages.length > 0) {
+                 var taskStartReplyRes = this.replyMessageWithPushFallback(
+                   ev.replyToken,
+                   uid,
+                   taskStartMessages,
+                   'direct_task_start',
+                 );
+                if (!taskStartReplyRes.success) {
+                  LogService.logEvent(
+                    "LINE_PUSH_ERROR",
+                    uid,
+                    taskStartReplyRes.error,
+                    JSON.stringify({ type: "direct_task_start" }),
+                  );
+                }
               }
             } else if (messageText === "จดค่าใช้จ่าย") {
               maybeShowLoading(sourceType, userId, "expense_guide_text");
@@ -3197,4 +3286,26 @@ var LineService = (function () {
       ).setMimeType(ContentService.MimeType.JSON);
     },
   };
+
+  function claimWebhookEvent(ev) {
+    var eventId = String((ev && ev.webhookEventId) || (ev && ev.message && ev.message.id) || '').trim();
+    if (!eventId) return false;
+    try {
+      var key = 'LINE_EVENT_' + eventId.replace(/[^A-Za-z0-9_-]/g, '_').slice(0, 200);
+      var cache = CacheService.getScriptCache();
+      var lock = LockService.getScriptLock();
+      // Do not drop a real LINE event just because another execution owns the lock.
+      // Processing it is safer than silently losing the user's message.
+      if (!lock.tryLock(1000)) return false;
+      try {
+        if (cache.get(key)) return true;
+        cache.put(key, '1', 21600);
+        return false;
+      } finally {
+        lock.releaseLock();
+      }
+    } catch (e) {
+      return false;
+    }
+  }
 })();

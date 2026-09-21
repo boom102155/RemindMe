@@ -367,7 +367,7 @@ function updateFinanceCategory(oldName, newName, type, icon, color) { return Set
 function deleteFinanceCategory(name) { return SettingsService.deleteFinanceCategory(name); }
 
 /* ---------- Settings API ---------- */
-function getSettings() { return SettingsService.getSettings(); }
+function getSettings() { return SettingsService.getPublicSettings(); }
 function saveSetting(key, value) { return SettingsService.saveSetting(key, value); }
 function clearAllData() { return SettingsService.clearAllData(); }
 
@@ -381,7 +381,7 @@ function getInitialData() {
   return {
     year: now.getFullYear(),
     month: now.getMonth(),
-    settings: SettingsService.getSettings(),
+    settings: SettingsService.getPublicSettings(),
     categories: SettingsService.getCategories(),
     financeCategories: SettingsService.getFinanceCategories(),
     lineGroups: SettingsService.getLineGroups(),

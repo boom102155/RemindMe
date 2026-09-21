@@ -63,19 +63,23 @@ var TriggerService = (function() {
 
     checkAndSendReminders: function() {
       if (!SetupService.isInstalled()) return;
-      var settings = SettingsService.getSettings();
-      var tz = settings.TIMEZONE || Session.getScriptTimeZone();
-      var now = new Date();
-      var nowLocal = toWallClock(now, tz);
-      var todayStr = Utilities.formatDate(now, tz, 'yyyy-MM-dd');
+      var lock = LockService.getScriptLock();
+      if (!lock.tryLock(5000)) return;
+      try {
+        var settings = SettingsService.getSettings();
+        var tz = settings.TIMEZONE || Session.getScriptTimeZone();
+        var now = new Date();
+        var nowLocal = toWallClock(now, tz);
+        var todayStr = Utilities.formatDate(now, tz, 'yyyy-MM-dd');
 
-      var sentCount = 0;
-      var errorCount = 0;
-      var webAppUrl = settings.WEB_APP_URL || '';
+        var sentCount = 0;
+        var errorCount = 0;
+        var webAppUrl = settings.WEB_APP_URL || '';
 
-      var tasks = TaskService.getTasks({date: todayStr});
+        // Read all pending tasks so reminders scheduled days in advance are not missed.
+        var tasks = TaskService.getAllTasks();
 
-      for (var i = 0; i < tasks.length; i++) {
+        for (var i = 0; i < tasks.length; i++) {
         var t = tasks[i];
         if (t.reminder_sent) continue;
         if (t.status === 'Done') continue;
@@ -90,21 +94,28 @@ var TriggerService = (function() {
 
         // ส่งเมื่ออยู่ในนาทีที่กำหนด หรือเลยมาไม่เกิน 30 วินาที (รองรับ trigger ล่าช้าเล็กน้อย)
         var shouldSend = nowMinute === reminderMinute || (diffSeconds >= 0 && diffSeconds <= 30);
-
-        LogService.logEvent('REMINDER_CHECK', t.task_id, 'checked', JSON.stringify({
-          due_time: t.due_time,
-          remind_before_m: t.remind_before_m,
-          reminderMinute: reminderMinute,
-          nowMinute: nowMinute,
-          diffSeconds: diffSeconds,
-          shouldSend: shouldSend
-        }));
+        // ลด log ที่เกิดทุกนาที: เก็บเฉพาะช่วง 5 นาทีก่อนเวลาส่งถึง 30 วินาทีหลังเวลา
+        var isNearReminder = diffSeconds >= -300 && diffSeconds <= 30;
+        if (isNearReminder) {
+          LogService.logEvent('REMINDER_CHECK', t.task_id, 'checked', JSON.stringify({
+            due_time: t.due_time,
+            remind_before_m: t.remind_before_m,
+            reminderMinute: reminderMinute,
+            nowMinute: nowMinute,
+            diffSeconds: diffSeconds,
+            shouldSend: shouldSend
+          }));
+        }
 
         if (shouldSend) {
           var res = LineService.sendLineReminder(null, t, webAppUrl);
           if (res.success) {
             sentCount++;
             TaskService.markReminderSent(t.task_id);
+            LogService.logEvent('REMINDER_SENT', t.task_id, 'Reminder sent', JSON.stringify({
+              reminderMinute: reminderMinute,
+              target: 'user_and_groups'
+            }));
           } else {
             errorCount++;
             var errMsg = res.error || (res.userResult && res.userResult.error) || 'ส่ง reminder ไม่สำเร็จ';
@@ -121,12 +132,22 @@ var TriggerService = (function() {
             }
           }
         }
-      }
+        }
 
-      var runAt = Utilities.formatDate(now, tz, 'yyyy-MM-dd HH:mm:ss');
-      SettingsService.saveSetting('LAST_REMINDER_RUN_AT', runAt);
-      SettingsService.saveSetting('LAST_REMINDER_SENT_COUNT', String(sentCount));
-      SettingsService.saveSetting('LAST_REMINDER_ERROR_COUNT', String(errorCount));
+        var runAt = Utilities.formatDate(now, tz, 'yyyy-MM-dd HH:mm:ss');
+        SettingsService.saveSetting('LAST_REMINDER_RUN_AT', runAt);
+        SettingsService.saveSetting('LAST_REMINDER_SENT_COUNT', String(sentCount));
+        SettingsService.saveSetting('LAST_REMINDER_ERROR_COUNT', String(errorCount));
+        try {
+          var cache = CacheService.getScriptCache();
+          if (!cache.get('LOG_PRUNED')) {
+            LogService.prune(5000);
+            cache.put('LOG_PRUNED', '1', 21600);
+          }
+        } catch (logErr) {}
+      } finally {
+        lock.releaseLock();
+      }
     }
   };
 })();
