@@ -643,6 +643,8 @@ var LineService = (function () {
     }
 
     function findCategoryByKeywords(typeFilter) {
+      var matchedCategory = null;
+      var matchedKeywordLength = 0;
       for (var catName in categoryKeywords) {
         if (!categoryKeywords.hasOwnProperty(catName)) continue;
         if (!categoryNameExists(catName)) continue;
@@ -654,13 +656,18 @@ var LineService = (function () {
                 categories[j].name === catName &&
                 (!typeFilter || categories[j].type === typeFilter)
               ) {
-                return categories[j];
+                // Prefer the most specific keyword: "น้ำมัน" must beat "น้ำ".
+                if (keywords[i].length > matchedKeywordLength) {
+                  matchedCategory = categories[j];
+                  matchedKeywordLength = keywords[i].length;
+                }
+                break;
               }
             }
           }
         }
       }
-      return null;
+      return matchedCategory;
     }
 
     // 1) ตรงชื่อหมวดหมู่พอดี
@@ -1060,6 +1067,294 @@ var LineService = (function () {
             },
           ],
         },
+      },
+    };
+  }
+
+  var FINANCE_GREEN = "#146B3A";
+  var FINANCE_GREEN_DARK = "#0B4D2A";
+  var FINANCE_GREEN_LIGHT = "#EAF5E8";
+  var FINANCE_INCOME = "#2E9E55";
+  var FINANCE_EXPENSE = "#E76F3C";
+
+  function moneyText(value) {
+    return "฿" + Number(value || 0).toLocaleString("th-TH", { maximumFractionDigits: 2 });
+  }
+
+  function financePeriodLabel(period) {
+    if (period === "daily") return "วันนี้";
+    if (period === "yearly") return "ปีนี้";
+    return "เดือนนี้";
+  }
+
+  function financePeriodDateLabel(period, dateStr) {
+    if (period === "monthly") {
+      var parts = String(dateStr || "").split("-");
+      var month = parseInt(parts[1], 10);
+      var months = ["มกราคม", "กุมภาพันธ์", "มีนาคม", "เมษายน", "พฤษภาคม", "มิถุนายน", "กรกฎาคม", "สิงหาคม", "กันยายน", "ตุลาคม", "พฤศจิกายน", "ธันวาคม"];
+      if (month >= 1 && month <= 12) return months[month - 1];
+    }
+    if (period === "yearly") {
+      var year = parseInt(String(dateStr || "").split("-")[0], 10);
+      if (year) return String(year + 543);
+    }
+    return dateStr;
+  }
+
+  function financeMenuButton(label, action, color) {
+    return {
+      type: "button",
+      style: "primary",
+      color: color || FINANCE_GREEN,
+      height: "sm",
+      margin: "sm",
+      action: { type: "postback", label: label, data: action },
+    };
+  }
+
+  function buildFinanceMenuFlex(webAppUrl) {
+    var dashboardUrl = webAppUrl || DEFAULT_WEB_APP_URL;
+    var financeUrl = dashboardUrl + (dashboardUrl.indexOf("?") >= 0 ? "&" : "?") + "view=finance&openExternalBrowser=1";
+    return {
+      type: "flex",
+      altText: "วิเคราะห์ค่าใช้จ่าย",
+      contents: {
+        type: "bubble",
+        styles: { header: { backgroundColor: FINANCE_GREEN_DARK }, body: { backgroundColor: "#FFFFFF" }, footer: { backgroundColor: FINANCE_GREEN_LIGHT } },
+        header: {
+          type: "box", layout: "vertical", paddingAll: "lg", spacing: "sm",
+          contents: [
+            { type: "text", text: "วิเคราะห์ค่าใช้จ่าย", weight: "bold", size: "xl", color: "#FFFFFF" },
+            { type: "text", text: "เลือกดูข้อมูลการเงินที่ต้องการ", size: "sm", color: "#D8F0D5", wrap: true },
+          ],
+        },
+        body: {
+          type: "box", layout: "vertical", paddingAll: "lg", spacing: "sm",
+          contents: [
+            financeMenuButton("฿  รายจ่ายวันนี้", "action=financeSummary&period=daily", FINANCE_GREEN),
+            financeMenuButton("▣  รายงานเดือนนี้", "action=financeSummary&period=monthly", FINANCE_GREEN),
+            financeMenuButton("▤  รายงานปีนี้", "action=financeSummary&period=yearly", FINANCE_GREEN),
+            financeMenuButton("◒  แยกตามหมวดหมู่", "action=financeCategory&period=monthly", "#3B914B"),
+            financeMenuButton("≡  รายการล่าสุด", "action=financeRecent&period=monthly", "#3B914B"),
+            { type: "separator", margin: "lg" },
+            { type: "text", text: "ดูข้อมูลเพิ่มเติมจาก Dashboard ได้ทุกเมื่อ", size: "xs", color: "#5D765F", align: "center", wrap: true, margin: "md" },
+          ],
+        },
+        footer: {
+          type: "box", layout: "vertical", spacing: "sm", paddingAll: "lg",
+          contents: [
+            { type: "button", style: "secondary", height: "sm", action: { type: "uri", label: "เปิด Dashboard", uri: financeUrl } },
+            { type: "button", style: "link", color: FINANCE_GREEN_DARK, height: "sm", action: { type: "message", label: "จดรายการ", text: "จดค่าใช้จ่าย" } },
+          ],
+        },
+      },
+    };
+  }
+
+  function financeRow(label, value, color) {
+    return {
+      type: "box", layout: "horizontal", spacing: "md", margin: "md",
+      contents: [
+        { type: "text", text: label, flex: 3, size: "sm", color: "#5D765F", wrap: true },
+        { type: "text", text: value, flex: 2, size: "md", color: color || "#1F2937", weight: "bold", align: "end" },
+      ],
+    };
+  }
+
+  function buildFinanceReportFlex(period, dateStr, webAppUrl) {
+    var summary = FinanceService.getFinanceSummary(period, dateStr);
+    var label = financePeriodLabel(period);
+    var periodDateLabel = financePeriodDateLabel(period, dateStr);
+    var dashboardUrl = webAppUrl || DEFAULT_WEB_APP_URL;
+    var financeUrl = dashboardUrl + (dashboardUrl.indexOf("?") >= 0 ? "&" : "?") + "view=finance&openExternalBrowser=1";
+    var body = [
+      { type: "text", text: "ภาพรวม " + label, size: "lg", weight: "bold", color: "#173B24" },
+      { type: "separator", margin: "md" },
+      financeRow("รายรับรวม", moneyText(summary.income), FINANCE_INCOME),
+      financeRow("รายจ่ายรวม", moneyText(summary.expense), FINANCE_EXPENSE),
+      financeRow("คงเหลือ", moneyText(summary.balance), summary.balance >= 0 ? FINANCE_GREEN_DARK : FINANCE_EXPENSE),
+    ];
+    return {
+      type: "flex", altText: "สรุปการเงิน " + label,
+      contents: {
+        type: "bubble",
+        styles: { header: { backgroundColor: FINANCE_GREEN_DARK }, body: { backgroundColor: "#FFFFFF" }, footer: { backgroundColor: FINANCE_GREEN_LIGHT } },
+        header: { type: "box", layout: "vertical", paddingAll: "lg", contents: [
+          { type: "text", text: "สรุปการเงิน", weight: "bold", size: "xl", color: "#FFFFFF" },
+          { type: "text", text: label + "  •  " + periodDateLabel, size: "sm", color: "#D8F0D5" },
+        ] },
+        body: { type: "box", layout: "vertical", paddingAll: "lg", contents: body },
+        footer: { type: "box", layout: "horizontal", spacing: "sm", paddingAll: "lg", contents: [
+          { type: "button", style: "link", color: FINANCE_GREEN_DARK, height: "sm", action: { type: "postback", label: "เมนูการเงิน", data: "action=financeMenu" } },
+          { type: "button", style: "secondary", height: "sm", action: { type: "uri", label: "ดูรายละเอียด", uri: financeUrl } },
+        ] },
+      },
+    };
+  }
+
+  function buildFinanceCategoryFlex(period, dateStr) {
+    var categories = FinanceService.getExpenseByCategory(period, dateStr);
+    var contents = [
+      { type: "text", text: "ค่าใช้จ่ายแยกตามหมวดหมู่", size: "lg", weight: "bold", color: "#173B24", wrap: true },
+      { type: "separator", margin: "md" },
+    ];
+    if (!categories.length) {
+      contents.push({ type: "text", text: "ยังไม่มีข้อมูลรายจ่ายในช่วงเวลานี้", size: "sm", color: "#5D765F", margin: "lg", wrap: true });
+    } else {
+      categories.slice(0, 8).forEach(function(item, index) {
+        contents.push(financeRow((index + 1) + ". " + item.category, moneyText(item.amount), FINANCE_EXPENSE));
+      });
+    }
+    return {
+      type: "flex", altText: "ค่าใช้จ่ายแยกตามหมวดหมู่",
+      contents: {
+        type: "bubble", styles: { header: { backgroundColor: FINANCE_GREEN_DARK }, body: { backgroundColor: "#FFFFFF" }, footer: { backgroundColor: FINANCE_GREEN_LIGHT } },
+        header: { type: "box", layout: "vertical", paddingAll: "lg", contents: [
+          { type: "text", text: "หมวดหมู่ค่าใช้จ่าย", weight: "bold", size: "xl", color: "#FFFFFF" },
+          { type: "text", text: financePeriodLabel(period) + "  •  " + dateStr, size: "sm", color: "#D8F0D5" },
+        ] },
+        body: { type: "box", layout: "vertical", paddingAll: "lg", contents: contents },
+        footer: { type: "box", layout: "horizontal", paddingAll: "lg", contents: [
+          { type: "button", style: "link", color: FINANCE_GREEN_DARK, height: "sm", action: { type: "postback", label: "เมนูการเงิน", data: "action=financeMenu" } },
+        ] },
+      },
+    };
+  }
+
+  function buildFinanceRecentFlex(period, dateStr) {
+    var records = FinanceService.getFinanceRecords({ period: period, periodDate: dateStr });
+    var contents = [
+      { type: "text", text: "รายการล่าสุด", size: "lg", weight: "bold", color: "#173B24" },
+      { type: "separator", margin: "md" },
+    ];
+    if (!records.length) {
+      contents.push({ type: "text", text: "ยังไม่มีรายการในช่วงเวลานี้", size: "sm", color: "#5D765F", margin: "lg" });
+    } else {
+      records.slice(0, 6).forEach(function(record) {
+        var color = record.type === "รายรับ" ? FINANCE_INCOME : FINANCE_EXPENSE;
+        contents.push(financeRow(record.title || "ไม่ระบุรายการ", moneyText(record.amount), color));
+        contents.push({ type: "text", text: (record.date || "") + "  •  " + (record.category || "อื่นๆ"), size: "xs", color: "#7B8E7E", margin: "xs" });
+      });
+    }
+    return {
+      type: "flex", altText: "รายการการเงินล่าสุด",
+      contents: {
+        type: "bubble", styles: { header: { backgroundColor: FINANCE_GREEN_DARK }, body: { backgroundColor: "#FFFFFF" }, footer: { backgroundColor: FINANCE_GREEN_LIGHT } },
+        header: { type: "box", layout: "vertical", paddingAll: "lg", contents: [
+          { type: "text", text: "รายการล่าสุด", weight: "bold", size: "xl", color: "#FFFFFF" },
+          { type: "text", text: financePeriodLabel(period) + "  •  " + dateStr, size: "sm", color: "#D8F0D5" },
+        ] },
+        body: { type: "box", layout: "vertical", paddingAll: "lg", contents: contents },
+        footer: { type: "box", layout: "horizontal", paddingAll: "lg", contents: [
+          { type: "button", style: "link", color: FINANCE_GREEN_DARK, height: "sm", action: { type: "postback", label: "เมนูการเงิน", data: "action=financeMenu" } },
+        ] },
+      },
+    };
+  }
+
+  function taskMenuButton(label, action, color) {
+    return {
+      type: "button",
+      style: "primary",
+      color: color || FINANCE_GREEN,
+      height: "sm",
+      margin: "sm",
+      action: { type: "postback", label: label, data: action },
+    };
+  }
+
+  function buildTaskMenuFlex(webAppUrl) {
+    var dashboardUrl = webAppUrl || DEFAULT_WEB_APP_URL;
+    var tasksUrl = dashboardUrl + (dashboardUrl.indexOf("?") >= 0 ? "&" : "?") + "view=tasks&openExternalBrowser=1";
+    return {
+      type: "flex",
+      altText: "เมนูภารกิจ",
+      contents: {
+        type: "bubble",
+        styles: { header: { backgroundColor: FINANCE_GREEN_DARK }, body: { backgroundColor: "#FFFFFF" }, footer: { backgroundColor: FINANCE_GREEN_LIGHT } },
+        header: { type: "box", layout: "vertical", paddingAll: "lg", spacing: "sm", contents: [
+          { type: "text", text: "ภารกิจของฉัน", weight: "bold", size: "xl", color: "#FFFFFF" },
+          { type: "text", text: "เลือกดูงานที่ต้องจัดการ", size: "sm", color: "#D8F0D5" },
+        ] },
+        body: { type: "box", layout: "vertical", paddingAll: "lg", spacing: "sm", contents: [
+          taskMenuButton("วันนี้", "action=taskSummary&mode=today", FINANCE_GREEN),
+          taskMenuButton("พรุ่งนี้", "action=taskSummary&mode=tomorrow", FINANCE_GREEN),
+          taskMenuButton("งานค้าง", "action=taskSummary&mode=pending", "#3B914B"),
+          taskMenuButton("งานสำคัญ", "action=taskSummary&mode=high", "#3B914B"),
+          { type: "separator", margin: "lg" },
+          { type: "text", text: "จัดการงานได้จาก LINE หรือ Dashboard", size: "xs", color: "#5D765F", align: "center", wrap: true, margin: "md" },
+        ] },
+        footer: { type: "box", layout: "vertical", spacing: "sm", paddingAll: "lg", contents: [
+          { type: "button", style: "secondary", height: "sm", action: { type: "uri", label: "เปิด Dashboard", uri: tasksUrl } },
+          { type: "button", style: "link", color: FINANCE_GREEN_DARK, height: "sm", action: { type: "message", label: "เพิ่มภารกิจ", text: "จดภารกิจ" } },
+        ] },
+      },
+    };
+  }
+
+  function addDaysToDateString(dateStr, days) {
+    var parts = String(dateStr).split("-");
+    var date = new Date(parseInt(parts[0], 10), parseInt(parts[1], 10) - 1, parseInt(parts[2], 10));
+    date.setDate(date.getDate() + days);
+    return Utilities.formatDate(date, Session.getScriptTimeZone(), "yyyy-MM-dd");
+  }
+
+  function buildTaskReportFlex(mode, dateStr) {
+    var title = "";
+    var tasks = [];
+    if (mode === "today" || mode === "tomorrow") {
+      var targetDate = mode === "tomorrow" ? addDaysToDateString(dateStr, 1) : dateStr;
+      title = mode === "tomorrow" ? "ภารกิจพรุ่งนี้" : "ภารกิจวันนี้";
+      tasks = TaskService.getTasks({ date: targetDate });
+    } else {
+      title = mode === "high" ? "งานสำคัญ" : "งานค้าง";
+      tasks = TaskService.getAllTasks().filter(function(task) {
+        if (task.status === "Done") return false;
+        return mode === "high" ? task.priority === "High" : true;
+      });
+    }
+
+    var contents = [
+      { type: "text", text: title, size: "lg", weight: "bold", color: "#173B24" },
+      { type: "separator", margin: "md" },
+    ];
+    if (!tasks.length) {
+      contents.push({ type: "text", text: "ไม่มีภารกิจในรายการนี้", size: "sm", color: "#5D765F", margin: "lg" });
+    } else {
+      tasks.slice(0, 7).forEach(function(task) {
+        var statusColor = task.status === "Done" ? "#7B8E7E" : (task.priority === "High" ? FINANCE_EXPENSE : FINANCE_GREEN_DARK);
+        var time = task.is_all_day ? "ทั้งวัน" : (task.due_time || "ไม่ระบุเวลา");
+        var taskRow = [
+          { type: "text", text: task.task_name || "ไม่ระบุชื่อ", flex: 5, size: "sm", color: statusColor, weight: "bold", wrap: true },
+        ];
+        if (task.status !== "Done") {
+          taskRow.push({
+            type: "button",
+            style: "primary",
+            color: "#3B914B",
+            height: "sm",
+            flex: 2,
+            action: { type: "postback", label: "✓", data: "action=completeTask&task_id=" + encodeURIComponent(task.task_id) },
+          });
+        }
+        contents.push({ type: "box", layout: "horizontal", spacing: "sm", alignItems: "center", margin: "md", contents: taskRow });
+        contents.push({ type: "text", text: "⏱️ " + time + "  •  " + (task.category || "-") + "  •  " + (task.status === "Done" ? "เสร็จแล้ว" : "รอดำเนินการ"), size: "xs", color: "#7B8E7E", margin: "xs", wrap: true });
+      });
+      if (tasks.length > 7) contents.push({ type: "text", text: "แสดง 7 รายการแรก เปิด Dashboard เพื่อดูทั้งหมด", size: "xs", color: "#7B8E7E", margin: "md", wrap: true });
+    }
+    return {
+      type: "flex", altText: title,
+      contents: {
+        type: "bubble", styles: { header: { backgroundColor: FINANCE_GREEN_DARK }, body: { backgroundColor: "#FFFFFF" }, footer: { backgroundColor: FINANCE_GREEN_LIGHT } },
+        header: { type: "box", layout: "vertical", paddingAll: "lg", contents: [
+          { type: "text", text: title, weight: "bold", size: "xl", color: "#FFFFFF" },
+          { type: "text", text: "รายการภารกิจที่ต้องจัดการ", size: "sm", color: "#D8F0D5" },
+        ] },
+        body: { type: "box", layout: "vertical", paddingAll: "lg", contents: contents },
+        footer: { type: "box", layout: "horizontal", paddingAll: "lg", spacing: "sm", contents: [
+          { type: "button", style: "link", color: FINANCE_GREEN_DARK, height: "sm", action: { type: "postback", label: "เมนูภารกิจ", data: "action=taskMenu" } },
+          { type: "button", style: "secondary", height: "sm", action: { type: "message", label: "เพิ่มภารกิจ", text: "จดภารกิจ" } },
+        ] },
       },
     };
   }
@@ -2409,6 +2704,44 @@ var LineService = (function () {
       maybeShowLoading(sourceType, uid, "showExpenseGuide");
       clearUserState(uid);
       return [buildExpenseGuideFlex()];
+    }
+
+    if (pbParams.action === "financeMenu") {
+      maybeShowLoading(sourceType, uid, "financeMenu");
+      clearUserState(uid);
+      return [buildFinanceMenuFlex(webAppUrl)];
+    }
+
+    if (pbParams.action === "financeSummary" || pbParams.action === "financeCategory" || pbParams.action === "financeRecent") {
+      try {
+        var reportPeriod = ["daily", "monthly", "yearly"].indexOf(pbParams.period) >= 0 ? pbParams.period : "monthly";
+        var reportDate = todayStrInTz(settings.TIMEZONE || Session.getScriptTimeZone());
+        maybeShowLoading(sourceType, uid, "finance_report_" + pbParams.action);
+        if (pbParams.action === "financeCategory") return [buildFinanceCategoryFlex(reportPeriod, reportDate)];
+        if (pbParams.action === "financeRecent") return [buildFinanceRecentFlex(reportPeriod, reportDate)];
+        return [buildFinanceReportFlex(reportPeriod, reportDate, webAppUrl)];
+      } catch (reportErr) {
+        LogService.logEvent("LINE_FINANCE_REPORT_ERROR", uid, reportErr.message, JSON.stringify({ action: pbParams.action, period: pbParams.period }));
+        return [{ type: "text", text: "โหลดรายงานการเงินไม่สำเร็จค่ะ กรุณาลองใหม่อีกครั้ง" }];
+      }
+    }
+
+    if (pbParams.action === "taskMenu") {
+      maybeShowLoading(sourceType, uid, "taskMenu");
+      clearUserState(uid);
+      return [buildTaskMenuFlex(webAppUrl)];
+    }
+
+    if (pbParams.action === "taskSummary") {
+      try {
+        var taskMode = ["today", "tomorrow", "pending", "high"].indexOf(pbParams.mode) >= 0 ? pbParams.mode : "today";
+        var taskDate = todayStrInTz(settings.TIMEZONE || Session.getScriptTimeZone());
+        maybeShowLoading(sourceType, uid, "task_report_" + taskMode);
+        return [buildTaskReportFlex(taskMode, taskDate)];
+      } catch (taskReportErr) {
+        LogService.logEvent("LINE_TASK_REPORT_ERROR", uid, taskReportErr.message, JSON.stringify({ mode: pbParams.mode }));
+        return [{ type: "text", text: "โหลดรายการภารกิจไม่สำเร็จค่ะ กรุณาลองใหม่อีกครั้ง" }];
+      }
     }
 
     if (pbParams.action === "startAddTask") {

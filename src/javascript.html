@@ -272,14 +272,20 @@
 
   /* ================= Initialization ================= */
   async function init() {
+    const urlParams = new URLSearchParams(window.location.search);
+    const requestedView = SERVER_VIEW || urlParams.get('view') || '';
+    const validViews = ['dashboard', 'tasks', 'finance', 'settings'];
+    const initialView = validViews.indexOf(requestedView) >= 0 ? requestedView : 'dashboard';
+
     document.getElementById('current-date-label').textContent = formatBE(todayStorage());
     document.getElementById('finance-filter-date').value = todayInputDate();
 
     // 1) โหลด cache ก่อน เพื่อแสดงผลทันที (ยังไม่ดึง server)
     loadCachedState();
     populateCategorySelects();
-    navigateTo('dashboard', true);
-    renderDashboard();
+    // เลือกหน้าปลายทางจาก URL ตั้งแต่ก่อน Render ครั้งแรก ป้องกัน Dashboard กระพริบ
+    navigateTo(initialView, true);
+    if (initialView === 'dashboard') renderDashboard();
 
     // 2) ดึงข้อมูลจริงใน background แล้วอัปเดต
     try {
@@ -290,6 +296,7 @@
       state.settings = initial.settings || {};
       state.tasks = initial.tasks || [];
       state.financeRecords = initial.financeRecords || state.financeRecords;
+      state.financeLoaded = Array.isArray(initial.financeRecords);
       state.financeSummary = initial.financeSummary || state.financeSummary;
       state.todayFinanceRecords = initial.todayFinanceRecords || state.todayFinanceRecords;
       state.dataLoaded = true;
@@ -297,17 +304,13 @@
       populateCategorySelects();
       populateNotifyTargetSelects();
       renderCurrentView();
+      if (initialView === 'settings') loadSettingsPage();
 
-      const urlParams = new URLSearchParams(window.location.search);
       const editFinanceId = urlParams.get('editFinanceId');
       if (editFinanceId) {
         setTimeout(() => openFinanceModalWithId(editFinanceId), 500);
       }
 
-      const viewParam = SERVER_VIEW || urlParams.get('view');
-      if (viewParam && ['dashboard','tasks','finance','settings','calendar'].indexOf(viewParam) >= 0) {
-        setTimeout(() => navigateTo(viewParam), 500);
-      }
     } catch (e) {
       console.error(e);
       showToast('โหลดข้อมูลเริ่มต้นไม่สำเร็จ: ' + e.message, 'error');

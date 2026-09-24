@@ -23,8 +23,8 @@ var RichMenuService = (function() {
     var areas = [];
     var actions = [
       {type: 'postback', data: 'action=showExpenseGuide'},
-      {type: 'postback', data: 'action=startAddTask'},
-      {type: 'uri', uri: baseUrl + (baseUrl.indexOf('?') >= 0 ? '&' : '?') + 'view=finance&openExternalBrowser=1'},
+      {type: 'postback', data: 'action=taskMenu'},
+      {type: 'postback', data: 'action=financeMenu'},
       {type: 'uri', uri: baseUrl + (baseUrl.indexOf('?') >= 0 ? '&' : '?') + 'view=tasks&openExternalBrowser=1'},
       {type: 'uri', uri: baseUrl + (baseUrl.indexOf('?') >= 0 ? '&' : '?') + 'view=dashboard&openExternalBrowser=1'},
       {type: 'uri', uri: baseUrl + (baseUrl.indexOf('?') >= 0 ? '&' : '?') + 'view=settings&openExternalBrowser=1'}
