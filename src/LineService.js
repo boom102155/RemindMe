@@ -821,6 +821,93 @@ var LineService = (function () {
     return true;
   }
 
+  function parseSmartTaskInput(text, settings) {
+    var raw = String(text || '').trim();
+    if (!raw || !/(เวลา|นัด|ประชุม|ภารกิจ|เตือน|วันที่\s*\d|วันนี้|พรุ่งนี้|เมื่อวาน|ทั้งวัน|\b\d{1,2}[.:]\d{2}\b)/i.test(raw)) return null;
+    if (!/(เวลา|นัด|ประชุม|ภารกิจ|วันที่\s*\d|ทั้งวัน|\b\d{1,2}[.:]\d{2}\b)/i.test(raw)) return null;
+
+    var dateText = '';
+    var dateValue = '';
+    var keywordDate = raw.match(/วันนี้|พรุ่งนี้|เมื่อวาน/);
+    var explicitDate = raw.match(/\b\d{1,2}[\/-]\d{1,2}[\/-]\d{4}\b/);
+    if (keywordDate) {
+      dateText = keywordDate[0];
+      dateValue = thaiDateFromKeyword(dateText, settings.TIMEZONE || Session.getScriptTimeZone());
+    } else if (explicitDate) {
+      dateText = explicitDate[0];
+      dateValue = parseThaiDateInput(dateText) || '';
+    }
+
+    var timeText = '';
+    var timeValue = '';
+    var clockMatch = raw.match(/เวลา\s*([01]?\d|2[0-3])\s*(?:[.:]\s*([0-5]\d)|โมง\s*(ครึ่ง)?)/i);
+    var bareClockMatch = raw.match(/\b([01]?\d|2[0-3])[.:]([0-5]\d)\b/);
+    if (clockMatch) {
+      timeText = clockMatch[0];
+      timeValue = normalizeTime(clockMatch[1] + ':' + (clockMatch[2] || (clockMatch[3] ? '30' : '00')));
+    } else if (bareClockMatch) {
+      timeText = bareClockMatch[0];
+      timeValue = normalizeTime(bareClockMatch[1] + ':' + bareClockMatch[2]);
+    }
+
+    var isAllDay = /ทั้งวัน/.test(raw);
+    if (isAllDay) timeValue = '08:00';
+
+    var priority = 'Medium';
+    if (/(ความสำคัญ\s*สูง|งานด่วน|ด่วน)/.test(raw)) priority = 'High';
+    else if (/(ความสำคัญ\s*ต่ำ)/.test(raw)) priority = 'Low';
+
+    var reminder = parseInt(settings.DEFAULT_REMIND_MINUTES, 10);
+    if (isNaN(reminder)) reminder = 15;
+    var reminderMatch = raw.match(/(?:เตือน|แจ้งเตือน)\s*(?:ก่อน\s*)?(\d+)\s*นาที/);
+    if (reminderMatch) reminder = parseInt(reminderMatch[1], 10);
+    else if (/(ตรงเวลา|ไม่ต้องเตือน)/.test(raw)) reminder = 0;
+
+    var notifyGroup = false;
+    var notifyGroupIds = '';
+    if (/ฉันและทุกกลุ่ม/.test(raw)) {
+      notifyGroup = true;
+      notifyGroupIds = '__all__';
+    }
+
+    var category = 'Work';
+    var taskCategories = SettingsService.getCategories() || [];
+    for (var i = 0; i < taskCategories.length; i++) {
+      var categoryName = String(taskCategories[i].name || '');
+      if (categoryName && new RegExp('(?:หมวดหมู่|ประเภทงาน)\\s*[:：]?\\s*' + escapeRegExp(categoryName), 'i').test(raw)) {
+        category = categoryName;
+        break;
+      }
+    }
+
+    var name = raw;
+    [dateText, timeText, 'วันนี้', 'พรุ่งนี้', 'เมื่อวาน', 'วันที่', 'เวลา', 'ทั้งวัน', 'งานด่วน', 'ด่วน', 'ความสำคัญสูง', 'ความสำคัญต่ำ', 'ตรงเวลา', 'ไม่ต้องเตือน', 'ฉันและทุกกลุ่ม'].forEach(function(part) {
+      if (part) name = name.replace(part, ' ');
+    });
+    name = name.replace(/(?:เตือน|แจ้งเตือน)\s*ก่อน\s*\d+\s*นาที/g, ' ')
+      .replace(/(?:หมวดหมู่|ประเภทงาน)\s*[:：]?\s*[^\s,]+/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim();
+    if (!name || name.length < 2) return null;
+
+    return {
+      task_name: name,
+      category: category,
+      task_date: dateValue,
+      due_time: timeValue,
+      priority: priority,
+      remind_before_m: reminder,
+      notify_group: notifyGroup,
+      notify_group_ids: notifyGroupIds,
+      is_all_day: isAllDay,
+      note: '',
+    };
+  }
+
+  function escapeRegExp(value) {
+    return String(value || '').replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  }
+
   function getWebAppUrl(settings) {
     return settings.WEB_APP_URL || DEFAULT_WEB_APP_URL;
   }
@@ -1292,6 +1379,167 @@ var LineService = (function () {
     };
   }
 
+  function buildTaskEditMenuFlex() {
+    var fields = [
+      ["ชื่อภารกิจ", "task_name"],
+      ["คำอธิบาย", "note"],
+      ["วันที่", "task_date"],
+      ["เวลาเริ่ม", "due_time"],
+      ["ความสำคัญ", "priority"],
+      ["หมวดหมู่", "category"],
+      ["การแจ้งเตือน", "remind_before_m"],
+      ["เป้าหมาย LINE", "notify_target"],
+    ];
+    var buttons = fields.map(function(field) {
+      return taskMenuButton(field[0], "action=editTaskField&field=" + field[1], FINANCE_GREEN);
+    });
+    return {
+      type: "flex",
+      altText: "เลือกข้อมูลที่ต้องการแก้ไข",
+      contents: {
+        type: "bubble",
+        styles: { header: { backgroundColor: FINANCE_GREEN_DARK }, body: { backgroundColor: "#FFFFFF" }, footer: { backgroundColor: FINANCE_GREEN_LIGHT } },
+        header: { type: "box", layout: "vertical", paddingAll: "lg", spacing: "sm", contents: [
+          { type: "text", text: "แก้ไขภารกิจ", weight: "bold", size: "xl", color: "#FFFFFF" },
+          { type: "text", text: "เลือกเฉพาะข้อมูลที่ต้องการเปลี่ยน", size: "sm", color: "#D8F0D5", wrap: true },
+        ] },
+        body: { type: "box", layout: "vertical", paddingAll: "lg", spacing: "sm", contents: buttons },
+        footer: { type: "box", layout: "vertical", paddingAll: "lg", contents: [
+          { type: "button", style: "link", color: FINANCE_GREEN_DARK, height: "sm", action: { type: "postback", label: "กลับไปยืนยัน", data: "action=editTaskBack" } },
+        ] },
+      },
+    };
+  }
+
+  function taskEditComplete(userId, state, webAppUrl) {
+    state.flow = "task";
+    state.step = "confirm";
+    delete state.edit_field;
+    setUserState(userId, state);
+    return [buildTaskFlex("confirm", state.data, webAppUrl)];
+  }
+
+  function taskEditOptions(state, field) {
+    var options = [];
+    if (field === "priority") {
+      options = [
+        { type: "message", label: "สูง", text: "สูง" },
+        { type: "message", label: "กลาง", text: "กลาง" },
+        { type: "message", label: "ต่ำ", text: "ต่ำ" },
+      ];
+    } else if (field === "task_date") {
+      options = [
+        { type: "message", label: "วันนี้", text: "วันนี้" },
+        { type: "message", label: "พรุ่งนี้", text: "พรุ่งนี้" },
+      ];
+    } else if (field === "due_time") {
+      options = [
+        { type: "message", label: "09.00", text: "09.00" },
+        { type: "message", label: "10.00", text: "10.00" },
+        { type: "message", label: "13.00", text: "13.00" },
+        { type: "message", label: "14.00", text: "14.00" },
+        { type: "message", label: "15.00", text: "15.00" },
+        { type: "message", label: "16.00", text: "16.00" },
+        { type: "message", label: "ทั้งวัน", text: "ทั้งวัน" },
+      ];
+    } else if (field === "remind_before_m") {
+      var reminderOptions = state.data.is_all_day ? ALL_DAY_REMINDER_OPTIONS : TIMED_REMINDER_OPTIONS;
+      options = reminderOptions.map(function(option) {
+        return { type: "message", label: option.label, text: option.label };
+      });
+    } else if (field === "category") {
+      var categories = SettingsService.getCategories() || [];
+      options = categories.map(function(category) {
+        return { type: "message", label: String(category.name).substring(0, 20), text: String(category.name) };
+      });
+    } else if (field === "notify_target") {
+      options = [
+        { type: "message", label: "เฉพาะฉัน", text: "เฉพาะฉัน" },
+        { type: "message", label: "ฉันและทุกกลุ่ม", text: "ฉันและทุกกลุ่ม" },
+      ];
+      var groups = SettingsService.getLineGroups() || [];
+      for (var i = 0; i < groups.length && i < 11; i++) {
+        options.push({ type: "message", label: String(groups[i].name || "กลุ่ม").substring(0, 20), text: "group:" + groups[i].group_id });
+      }
+    }
+    return options;
+  }
+
+  function taskEditPrompt(userId, state, field, webAppUrl) {
+    state.flow = "task_edit";
+    state.step = "edit";
+    state.edit_field = field;
+    setUserState(userId, state);
+    var prompts = {
+      task_name: "พิมพ์ชื่อภารกิจใหม่ได้เลยค่ะ",
+      note: "พิมพ์คำอธิบายใหม่ หรือพิมพ์ ข้าม เพื่อล้างคำอธิบายค่ะ",
+      task_date: "เลือกวันที่ใหม่ หรือพิมพ์วันที่รูปแบบ วว-ดด-ปปปป ค่ะ",
+      due_time: "เลือกเวลาเริ่มใหม่ หรือพิมพ์เวลา เช่น 09.15 ค่ะ",
+      priority: "เลือกระดับความสำคัญใหม่ค่ะ",
+      category: "เลือกหมวดหมู่ใหม่ค่ะ",
+      remind_before_m: "เลือกเวลาแจ้งเตือนใหม่ค่ะ",
+      notify_target: "เลือกเป้าหมายการแจ้งเตือนใหม่ค่ะ",
+    };
+    var options = taskEditOptions(state, field);
+    if (options.length) return [makeQuickReplyMessage(prompts[field], options)];
+    return [{ type: "text", text: prompts[field] || "พิมพ์ข้อมูลใหม่ได้เลยค่ะ" }];
+  }
+
+  function handleTaskEditFlow(userId, state, text, settings, webAppUrl) {
+    if (!state || state.flow !== "task_edit" || state.step !== "edit") return null;
+    var field = state.edit_field;
+    var value = String(text || "").trim();
+    var tz = settings.TIMEZONE || Session.getScriptTimeZone();
+    if (field === "task_name") {
+      if (!value) return [{ type: "text", text: "กรุณาระบุชื่อภารกิจค่ะ" }];
+      state.data.task_name = value;
+    } else if (field === "note") {
+      state.data.note = value === "ข้าม" ? "" : value;
+    } else if (field === "task_date") {
+      var date = thaiDateFromKeyword(value, tz);
+      if (!isValidDate(date)) return [{ type: "text", text: "รูปแบบวันที่ไม่ถูกต้องค่ะ" }];
+      state.data.task_date = date;
+    } else if (field === "due_time") {
+      if (value === "ทั้งวัน") {
+        state.data.is_all_day = true;
+        state.data.due_time = "08:00";
+      } else {
+        var time = normalizeTime(value);
+        if (time === null) return [{ type: "text", text: "รูปแบบเวลาไม่ถูกต้อง เช่น 09.15 ค่ะ" }];
+        state.data.is_all_day = false;
+        state.data.due_time = time;
+      }
+    } else if (field === "priority") {
+      var priorityMap = { สูง: "High", กลาง: "Medium", ต่ำ: "Low" };
+      if (!priorityMap[value]) return [{ type: "text", text: "กรุณาเลือกระดับความสำคัญจากปุ่มค่ะ" }];
+      state.data.priority = priorityMap[value];
+    } else if (field === "category") {
+      if (!value) return [{ type: "text", text: "กรุณาเลือกหมวดหมู่ค่ะ" }];
+      state.data.category = value;
+    } else if (field === "remind_before_m") {
+      var reminderOptions = state.data.is_all_day ? ALL_DAY_REMINDER_OPTIONS : TIMED_REMINDER_OPTIONS;
+      var reminderValue = null;
+      for (var i = 0; i < reminderOptions.length; i++) {
+        if (reminderOptions[i].label === value) { reminderValue = reminderOptions[i].value; break; }
+      }
+      if (reminderValue === null) reminderValue = parseInt(value, 10);
+      if (isNaN(reminderValue) || reminderValue < 0) return [{ type: "text", text: "กรุณาเลือกเวลาแจ้งเตือนจากปุ่มค่ะ" }];
+      state.data.remind_before_m = reminderValue;
+    } else if (field === "notify_target") {
+      if (value === "เฉพาะฉัน") {
+        state.data.notify_group = false;
+        state.data.notify_group_ids = "";
+      } else if (value === "ฉันและทุกกลุ่ม") {
+        state.data.notify_group = true;
+        state.data.notify_group_ids = "__all__";
+      } else if (value.indexOf("group:") === 0) {
+        state.data.notify_group = true;
+        state.data.notify_group_ids = value.substring(6);
+      } else return [{ type: "text", text: "กรุณาเลือกเป้าหมายจากปุ่มค่ะ" }];
+    }
+    return taskEditComplete(userId, state, webAppUrl);
+  }
+
   function addDaysToDateString(dateStr, days) {
     var parts = String(dateStr).split("-");
     var date = new Date(parseInt(parts[0], 10), parseInt(parts[1], 10) - 1, parseInt(parts[2], 10));
@@ -1572,32 +1820,28 @@ var LineService = (function () {
     if (mode === "confirm") {
       footer = {
         type: "box",
-        layout: "horizontal",
-        spacing: "md",
+        layout: "vertical",
+        spacing: "sm",
         paddingAll: "lg",
         contents: [
           {
             type: "button",
-            style: "secondary",
+            style: "link",
+            color: "#146B3A",
             height: "sm",
-            flex: 1,
-            action: {
-              type: "postback",
-              label: "❌ ยกเลิก",
-              data: "action=confirmTask&confirm=no",
-            },
+            action: { type: "postback", label: "แก้ไขข้อมูล", data: "action=editTask" },
           },
           {
-            type: "button",
-            style: "primary",
-            height: "sm",
-            color: "#10B981",
-            flex: 1,
-            action: {
-              type: "postback",
-              label: "✅ บันทึก",
-              data: "action=confirmTask&confirm=yes",
-            },
+            type: "box", layout: "horizontal", spacing: "md", contents: [
+              {
+                type: "button", style: "secondary", height: "sm", flex: 1,
+                action: { type: "postback", label: "❌ ยกเลิก", data: "action=confirmTask&confirm=no" },
+              },
+              {
+                type: "button", style: "primary", height: "sm", color: "#10B981", flex: 1,
+                action: { type: "postback", label: "✅ บันทึก", data: "action=confirmTask&confirm=yes" },
+              },
+            ],
           },
         ],
       };
@@ -2322,6 +2566,52 @@ var LineService = (function () {
     };
   }
 
+  function advanceSmartTaskFlow(userId, state, settings, webAppUrl) {
+    if (!state.data.task_date) {
+      state.step = "smart_date";
+      setUserState(userId, state);
+      return [makeQuickReplyMessage("ภารกิจนี้เป็นของวันไหนคะ", [
+        { type: "message", label: "วันนี้", text: "วันนี้" },
+        { type: "message", label: "พรุ่งนี้", text: "พรุ่งนี้" },
+      ])];
+    }
+    if (!state.data.due_time && !state.data.is_all_day) {
+      state.step = "smart_time";
+      setUserState(userId, state);
+      return [makeQuickReplyMessage("ระบุเวลาเริ่ม หรือเลือกภารกิจทั้งวันค่ะ", [
+        { type: "message", label: "09.00", text: "09.00" },
+        { type: "message", label: "10.00", text: "10.00" },
+        { type: "message", label: "13.00", text: "13.00" },
+        { type: "message", label: "14.00", text: "14.00" },
+        { type: "message", label: "ทั้งวัน", text: "ทั้งวัน" },
+      ])];
+    }
+    state.flow = "task";
+    state.step = "confirm";
+    setUserState(userId, state);
+    return [buildTaskFlex("confirm", state.data, webAppUrl), { type: "text", text: "ตรวจสอบข้อมูลแล้วกดบันทึกได้เลยค่ะ" }];
+  }
+
+  function handleSmartTaskFlow(userId, state, text, settings, webAppUrl) {
+    var value = String(text || "").trim();
+    var tz = settings.TIMEZONE || Session.getScriptTimeZone();
+    if (state.step === "smart_date") {
+      var date = thaiDateFromKeyword(value, tz);
+      if (!isValidDate(date)) return [{ type: "text", text: "รูปแบบวันที่ไม่ถูกต้องค่ะ กรุณาพิมพ์ วันนี้, พรุ่งนี้ หรือ วว-ดด-ปปปป" }];
+      state.data.task_date = date;
+    } else if (state.step === "smart_time") {
+      if (value === "ทั้งวัน") {
+        state.data.is_all_day = true;
+        state.data.due_time = "08:00";
+      } else {
+        var time = normalizeTime(value);
+        if (time === null) return [{ type: "text", text: "รูปแบบเวลาไม่ถูกต้องค่ะ เช่น 09.15" }];
+        state.data.due_time = time;
+      }
+    }
+    return advanceSmartTaskFlow(userId, state, settings, webAppUrl);
+  }
+
   function handleTaskFlow(replyToken, userId, text, settings, webAppUrl) {
     var state = getUserState(userId);
     LogService.logEvent(
@@ -2333,6 +2623,14 @@ var LineService = (function () {
     if (!state) return null;
     var tz = settings.TIMEZONE || Session.getScriptTimeZone();
     var t = String(text || "").trim();
+
+    if (state.flow === "task_smart") {
+      return handleSmartTaskFlow(userId, state, t, settings, webAppUrl);
+    }
+
+    if (state.flow === "task_edit") {
+      return handleTaskEditFlow(userId, state, t, settings, webAppUrl);
+    }
 
     function reply(msg) {
       return Array.isArray(msg) ? msg : [msg];
@@ -2748,6 +3046,35 @@ var LineService = (function () {
       maybeShowLoading(sourceType, uid, "startAddTask");
       clearUserState(uid);
       return [startTaskFlow(ev.replyToken, uid)];
+    }
+
+    if (pbParams.action === "editTask") {
+      maybeShowLoading(sourceType, uid, "editTask");
+      var editState = getUserState(uid);
+      if (!editState || editState.step !== "confirm" || editState.flow === "finance") {
+        return [{ type: "text", text: "ไม่พบข้อมูลภารกิจที่กำลังแก้ไขค่ะ กรุณาเริ่มสร้างภารกิจใหม่" }];
+      }
+      return [buildTaskEditMenuFlex()];
+    }
+
+    if (pbParams.action === "editTaskBack") {
+      var backState = getUserState(uid);
+      if (!backState || !backState.data) return [{ type: "text", text: "ไม่พบข้อมูลภารกิจค่ะ กรุณาเริ่มใหม่" }];
+      backState.flow = "task";
+      backState.step = "confirm";
+      delete backState.edit_field;
+      setUserState(uid, backState);
+      return [buildTaskFlex("confirm", backState.data, webAppUrl)];
+    }
+
+    if (pbParams.action === "editTaskField") {
+      var editableFields = ["task_name", "note", "task_date", "due_time", "priority", "category", "remind_before_m", "notify_target"];
+      var fieldState = getUserState(uid);
+      if (!fieldState || !fieldState.data || fieldState.step !== "confirm" || editableFields.indexOf(pbParams.field) < 0) {
+        return [{ type: "text", text: "ไม่พบข้อมูลที่ต้องการแก้ไขค่ะ กรุณาเริ่มใหม่" }];
+      }
+      maybeShowLoading(sourceType, uid, "editTaskField");
+      return taskEditPrompt(uid, fieldState, pbParams.field, webAppUrl);
     }
 
     if (pbParams.action === "confirmTask") {
@@ -3437,6 +3764,24 @@ var LineService = (function () {
 
           // เริ่มบันทึกรายรับ-รายจ่ายจากข้อความ (เฉพาะแชทส่วนตัว ไม่ทำงานในกลุ่ม/ห้อง)
           if (!handled && messageText && ev.replyToken && sourceType !== "group" && sourceType !== "room") {
+            var smartTask = parseSmartTaskInput(messageText, settings);
+            var explicitTaskCue = /(เวลา|นัด|ประชุม|ภารกิจ|วันที่\s*\d|ทั้งวัน|\b\d{1,2}[.:]\d{2}\b)/i.test(messageText);
+            if (smartTask && explicitTaskCue) {
+              maybeShowLoading(sourceType, userId, "smart_task_start");
+              clearUserState(uid);
+              setUserState(uid, { flow: "task_smart", step: "smart_missing", data: smartTask });
+              var smartTaskMessages = advanceSmartTaskFlow(uid, getUserState(uid), settings, webAppUrl);
+              var smartTaskReplyRes = this.replyMessageWithPushFallback(
+                ev.replyToken,
+                uid,
+                smartTaskMessages,
+                "smart_task_start",
+              );
+              if (!smartTaskReplyRes.success) {
+                LogService.logEvent("LINE_PUSH_ERROR", uid, smartTaskReplyRes.error, JSON.stringify({ type: "smart_task_start" }));
+              }
+              handled = true;
+            } else {
             var parsedRecords = parseFinanceItems(messageText, categories);
             if (parsedRecords && parsedRecords.length > 0) {
               clearUserState(uid);
@@ -3510,6 +3855,7 @@ var LineService = (function () {
                   text: 'พิมพ์รายการตามด้วยจำนวนเงิน เช่น\n"ข้าวมันไก่ 50" หรือ "เงินเดือน 20000"\nหรือ "ข้าวไข่เจียว 20, น้ำแตงโมปั่น 40"\nระบบจะบันทึกให้อัตโนมัติ',
                 },
               ]);
+            }
             }
           }
 
